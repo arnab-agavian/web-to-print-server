@@ -29,6 +29,8 @@ function publicUser(user) {
     id: user.id,
     email: user.email,
     fullName: user.user_metadata?.full_name || null,
+    phone: user.user_metadata?.phone || null,
+    role: user.user_metadata?.role || "customer",
     emailConfirmedAt: user.email_confirmed_at || null,
     createdAt: user.created_at,
   };
@@ -59,12 +61,14 @@ export function createAuthService({
   demoMode = env.demoMode,
 } = {}) {
   return {
-    async signup({ email, password, fullName }) {
+    async signup({ email, password, fullName, phone, role }) {
       const client = requireClient(createClient);
       const { data, error } = await client.auth.signUp({
         email,
         password,
-        options: { data: { full_name: fullName } },
+        options: {
+          data: { full_name: fullName, phone, role },
+        },
       });
       if (error) {
         throw serviceError(

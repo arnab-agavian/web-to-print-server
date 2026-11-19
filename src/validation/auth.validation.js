@@ -7,6 +7,11 @@ export const signupSchema = z.object({
   email,
   password,
   fullName: z.string().trim().min(2).max(100),
+  phone: z
+    .string()
+    .trim()
+    .regex(/^\+?[1-9]\d{7,14}$/, "Enter a valid phone number."),
+  role: z.literal("customer"),
 });
 
 export const loginSchema = z.object({

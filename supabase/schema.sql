@@ -166,8 +166,14 @@ create trigger orders_set_updated_at before update on public.orders for each row
 
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path='' as $$
 begin
-  insert into public.profiles(id,email,full_name)
-  values(new.id,new.email,coalesce(new.raw_user_meta_data->>'full_name',''));
+  insert into public.profiles(id,email,full_name,phone,role)
+  values(
+    new.id,
+    new.email,
+    coalesce(new.raw_user_meta_data->>'full_name',''),
+    nullif(new.raw_user_meta_data->>'phone',''),
+    'customer'
+  );
   return new;
 end; $$;
 drop trigger if exists on_auth_user_created on auth.users;

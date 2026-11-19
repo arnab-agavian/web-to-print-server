@@ -12,7 +12,11 @@ const user = {
   email: "maya@example.com",
   email_confirmed_at: "2026-11-20T10:00:00.000Z",
   created_at: "2026-11-20T09:00:00.000Z",
-  user_metadata: { full_name: "Maya Brooks" },
+  user_metadata: {
+    full_name: "Maya Brooks",
+    phone: "+919876543210",
+    role: "customer",
+  },
 };
 
 const session = {
@@ -38,8 +42,21 @@ test("auth validation normalizes email and rejects weak passwords", () => {
     email: "  MAYA@EXAMPLE.COM ",
     password: "StrongPassword123!",
     fullName: "Maya Brooks",
+    phone: "+919876543210",
+    role: "customer",
   });
   assert.equal(signup.email, "maya@example.com");
+  assert.equal(signup.phone, "+919876543210");
+  assert.equal(signup.role, "customer");
+  assert.throws(() =>
+    signupSchema.parse({
+      email: "maya@example.com",
+      password: "StrongPassword123!",
+      fullName: "Maya Brooks",
+      phone: "+919876543210",
+      role: "admin",
+    }),
+  );
   assert.throws(() =>
     loginSchema.parse({ email: "maya@example.com", password: "short" }),
   );
@@ -58,6 +75,8 @@ test("auth service returns public signup and login results", async () => {
     email: user.email,
     password: "StrongPassword123!",
     fullName: "Maya Brooks",
+    phone: "+919876543210",
+    role: "customer",
   });
   assert.equal(signup.requiresEmailConfirmation, true);
   assert.equal(signup.session, null);
@@ -68,6 +87,8 @@ test("auth service returns public signup and login results", async () => {
   });
   assert.equal(login.session.accessToken, "access-token");
   assert.equal(login.user.fullName, "Maya Brooks");
+  assert.equal(login.user.phone, "+919876543210");
+  assert.equal(login.user.role, "customer");
 });
 
 test("auth service globally revokes the access token", async () => {

@@ -1,0 +1,207 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Profile {
+  id             String       @id @db.Uuid
+  email          String
+  fullName       String?      @map("full_name")
+  companyName    String?      @map("company_name")
+  phone          String?
+  role           String       @default("customer")
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime     @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  designs        Design[]
+  orders         Order[]
+  proofsCreated  Proof[]      @relation("ProofCreatedBy")
+  proofsApproved Proof[]      @relation("ProofApprovedBy")
+  orderEvents    OrderEvent[]
+
+  @@map("profiles")
+}
+
+model Product {
+  id                  String      @id @default(uuid()) @db.Uuid
+  slug                String      @unique
+  name                String
+  family              String
+  description         String?
+  basePrice           Decimal     @map("base_price") @db.Decimal(12, 2)
+  minQuantity         Int         @default(1) @map("min_quantity")
+  minWidth            Decimal     @map("min_width") @db.Decimal(10, 2)
+  maxWidth            Decimal     @map("max_width") @db.Decimal(10, 2)
+  minHeight           Decimal     @map("min_height") @db.Decimal(10, 2)
+  maxHeight           Decimal     @map("max_height") @db.Decimal(10, 2)
+  defaultWidth        Decimal     @map("default_width") @db.Decimal(10, 2)
+  defaultHeight       Decimal     @map("default_height") @db.Decimal(10, 2)
+  bleedMm             Decimal     @default(3) @map("bleed_mm") @db.Decimal(6, 2)
+  resolutionDpi       Int         @default(300) @map("resolution_dpi")
+  configurationSchema Json        @default("{}") @map("configuration_schema")
+  active              Boolean     @default(true)
+  sortOrder           Int         @default(0) @map("sort_order") @db.SmallInt
+  createdAt           DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  templates           Template[]
+  designs             Design[]
+  orderItems          OrderItem[]
+
+  @@map("products")
+}
+
+model Template {
+  id               String   @id @default(uuid()) @db.Uuid
+  productId        String   @map("product_id") @db.Uuid
+  name             String
+  canvasWidth      Decimal  @map("canvas_width") @db.Decimal(10, 2)
+  canvasHeight     Decimal  @map("canvas_height") @db.Decimal(10, 2)
+  safeArea         Json     @map("safe_area")
+  placeholderRules Json     @default("{}") @map("placeholder_rules")
+  thumbnailPath    String?  @map("thumbnail_path")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  designs          Design[]
+
+  @@index([productId])
+  @@map("templates")
+}
+
+model Design {
+  id             String      @id @default(uuid()) @db.Uuid
+  customerId     String      @map("customer_id") @db.Uuid
+  productId      String      @map("product_id") @db.Uuid
+  templateId     String?     @map("template_id") @db.Uuid
+  name           String
+  designData     Json        @default("{}") @map("design_data")
+  previewPath    String?     @map("preview_path")
+  sourceFilePath String?     @map("source_file_path")
+  status         String      @default("draft")
+  createdAt      DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime    @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer       Profile     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  product        Product     @relation(fields: [productId], references: [id])
+  template       Template?   @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  orderItems     OrderItem[]
+
+  @@index([customerId, updatedAt(sort: Desc)])
+  @@index([productId])
+  @@index([templateId])
+  @@map("designs")
+}
+
+model Order {
+  id               String           @id @default(uuid()) @db.Uuid
+  orderNumber      String           @unique @map("order_number")
+  customerId       String           @map("customer_id") @db.Uuid
+  status           String           @default("quote")
+  proofStatus      String           @default("not_started") @map("proof_status")
+  productionReady  Boolean          @default(false) @map("production_ready")
+  subtotal         Decimal          @default(0) @db.Decimal(12, 2)
+  tax              Decimal          @default(0) @db.Decimal(12, 2)
+  total            Decimal          @default(0) @db.Decimal(12, 2)
+  currency         String           @default("INR")
+  configuration    Json             @default("{}")
+  paymentReference String?          @map("payment_reference")
+  invoicePath      String?          @map("invoice_path")
+  reorderedFromId  String?          @map("reordered_from") @db.Uuid
+  dueAt            DateTime?        @map("due_at") @db.Timestamptz(6)
+  completedAt      DateTime?        @map("completed_at") @db.Timestamptz(6)
+  createdAt        DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime         @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer         Profile          @relation(fields: [customerId], references: [id])
+  reorderedFrom    Order?           @relation("OrderReorders", fields: [reorderedFromId], references: [id], onDelete: SetNull)
+  reorders         Order[]          @relation("OrderReorders")
+  items            OrderItem[]
+  proofs           Proof[]
+  productionFiles  ProductionFile[]
+  events           OrderEvent[]
+
+  @@index([customerId, createdAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
+  @@index([reorderedFromId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String   @id @default(uuid()) @db.Uuid
+  orderId       String   @map("order_id") @db.Uuid
+  productId     String   @map("product_id") @db.Uuid
+  designId      String?  @map("design_id") @db.Uuid
+  quantity      Int
+  unitPrice     Decimal  @map("unit_price") @db.Decimal(12, 2)
+  widthMm       Decimal  @map("width_mm") @db.Decimal(10, 2)
+  heightMm      Decimal  @map("height_mm") @db.Decimal(10, 2)
+  material      String
+  configuration Json     @default("{}")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  order         Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product       Product  @relation(fields: [productId], references: [id])
+  design        Design?  @relation(fields: [designId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+  @@index([productId])
+  @@index([designId])
+  @@map("order_items")
+}
+
+model Proof {
+  id              String           @id @default(uuid()) @db.Uuid
+  orderId         String           @map("order_id") @db.Uuid
+  version         Int
+  status          String           @default("pending")
+  previewPath     String           @map("preview_path")
+  notes           String?
+  changeRequest   String?          @map("change_request")
+  createdById     String?          @map("created_by") @db.Uuid
+  approvedById    String?          @map("approved_by") @db.Uuid
+  approvedAt      DateTime?        @map("approved_at") @db.Timestamptz(6)
+  createdAt       DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  order           Order            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  createdBy       Profile?         @relation("ProofCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  approvedBy      Profile?         @relation("ProofApprovedBy", fields: [approvedById], references: [id], onDelete: SetNull)
+  productionFiles ProductionFile[]
+
+  @@unique([orderId, version])
+  @@index([orderId, createdAt(sort: Desc)])
+  @@index([createdById])
+  @@index([approvedById])
+  @@map("proofs")
+}
+
+model ProductionFile {
+  id          String   @id @default(uuid()) @db.Uuid
+  orderId     String   @map("order_id") @db.Uuid
+  proofId     String   @map("proof_id") @db.Uuid
+  kind        String
+  storagePath String   @map("storage_path")
+  fileName    String   @map("file_name")
+  sizeBytes   BigInt?  @map("size_bytes")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  proof       Proof    @relation(fields: [proofId], references: [id])
+
+  @@index([orderId])
+  @@index([proofId])
+  @@map("production_files")
+}
+
+model OrderEvent {
+  id        BigInt   @id @default(autoincrement())
+  orderId   String   @map("order_id") @db.Uuid
+  actorId   String?  @map("actor_id") @db.Uuid
+  eventType String   @map("event_type")
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  actor     Profile? @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([orderId, createdAt(sort: Desc)])
+  @@index([actorId])
+  @@map("order_events")
+}

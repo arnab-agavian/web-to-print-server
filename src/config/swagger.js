@@ -1092,10 +1092,50 @@ export const swaggerSpec = {
         },
       },
     },
+    "/admin/customers": {
+      get: {
+        tags: ["Admin"],
+        summary: "List customers who have placed orders",
+        description:
+          "Returns customer contact details with total order count and `jobsLeft`, defined as orders whose status is neither `completed` nor `cancelled`.",
+        operationId: "getAdminCustomers",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          demoAdminHeader,
+          {
+            name: "q",
+            in: "query",
+            schema: { type: "string", maxLength: 200 },
+            description: "Search by email, name, company, or phone.",
+          },
+          {
+            name: "limit",
+            in: "query",
+            schema: { type: "integer", minimum: 1, maximum: 100, default: 50 },
+          },
+          {
+            name: "offset",
+            in: "query",
+            schema: { type: "integer", minimum: 0, default: 0 },
+          },
+        ],
+        responses: {
+          200: dataResponse("Customers fetched.", {
+            $ref: "#/components/schemas/CustomerList",
+          }),
+          400: errorResponse("Invalid query parameters."),
+          401: errorResponse("Authentication required."),
+          403: errorResponse("Admin access required."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
     "/admin/jobs": {
       get: {
         tags: ["Admin"],
         summary: "Search the production queue",
+        description:
+          "Each order item includes its design and template, including `placeholderRules` and `thumbnailPath`, when a design/template is attached.",
         operationId: "getAdminJobs",
         security: [{ bearerAuth: [] }],
         parameters: [
@@ -1149,6 +1189,8 @@ export const swaggerSpec = {
       get: {
         tags: ["Admin"],
         summary: "Download the production PDF",
+        description:
+          "Generates one print-size artwork page per order item. The template `thumbnailPath` is used as the background and the order's design placeholder values are rendered using `placeholderRules` positions and styles.",
         operationId: "downloadProductionFile",
         security: [{ bearerAuth: [] }],
         parameters: [idParameter, demoAdminHeader],
@@ -1167,6 +1209,7 @@ export const swaggerSpec = {
           403: errorResponse("Admin access required."),
           404: errorResponse("Order not found."),
           409: errorResponse("Production file is locked until proof approval."),
+          422: errorResponse("Required placeholder data is missing or template artwork is not PNG/JPEG."),
           500: errorResponse("Unexpected server error."),
         },
       },
@@ -1444,7 +1487,12 @@ export const swaggerSpec = {
           canvasWidth: { type: "number", description: "Canvas width in millimetres." },
           canvasHeight: { type: "number", description: "Canvas height in millimetres." },
           safeArea: { $ref: "#/components/schemas/SafeArea" },
-          placeholderRules: { type: "object", additionalProperties: true },
+          placeholderRules: {
+            type: "object",
+            additionalProperties: true,
+            description:
+              "Map keyed by placeholder name. Rendering supports required, defaultValue, x, y, width, height, fontSize, font, color, align, and rotate. Coordinates use template canvas units (millimetres).",
+          },
           thumbnailPath: { type: "string", nullable: true },
           active: { type: "boolean" },
           createdAt: { type: "string", format: "date-time" },
@@ -1459,7 +1507,13 @@ export const swaggerSpec = {
           canvasWidth: { type: "number", exclusiveMinimum: true, minimum: 0 },
           canvasHeight: { type: "number", exclusiveMinimum: true, minimum: 0 },
           safeArea: { $ref: "#/components/schemas/SafeArea" },
-          placeholderRules: { type: "object", additionalProperties: true, default: {} },
+          placeholderRules: {
+            type: "object",
+            additionalProperties: true,
+            default: {},
+            description:
+              "Map keyed by placeholder name. Rendering supports required, defaultValue, x, y, width, height, fontSize, font, color, align, and rotate. Coordinates use template canvas units (millimetres).",
+          },
           thumbnailPath: { type: "string", minLength: 1, maxLength: 1000, nullable: true },
           active: { type: "boolean", default: true },
         },
@@ -1503,10 +1557,11 @@ export const swaggerSpec = {
           canvasWidth: { type: "number" },
           canvasHeight: { type: "number" },
           safeArea: { $ref: "#/components/schemas/SafeArea" },
+          placeholderRules: { type: "object", additionalProperties: true },
           thumbnailPath: { type: "string", nullable: true },
           active: { type: "boolean" },
         },
-        required: ["id", "name", "canvasWidth", "canvasHeight", "safeArea", "active"],
+        required: ["id", "name", "canvasWidth", "canvasHeight", "safeArea", "placeholderRules", "active"],
       },
       Design: {
         type: "object",
@@ -1912,6 +1967,48 @@ export const swaggerSpec = {
           created_at: { type: "string", format: "date-time" },
         },
         required: ["id", "version", "status"],
+      },
+      CustomerSummary: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          email: { type: "string", format: "email" },
+          fullName: { type: "string", nullable: true },
+          companyName: { type: "string", nullable: true },
+          phone: { type: "string", nullable: true },
+          orderCount: { type: "integer", minimum: 1 },
+          jobsLeft: {
+            type: "integer",
+            minimum: 0,
+            description: "Orders not yet completed or cancelled.",
+          },
+          totalSpent: { type: "number", minimum: 0 },
+          lastOrderAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time", nullable: true },
+        },
+        required: [
+          "id",
+          "email",
+          "fullName",
+          "companyName",
+          "phone",
+          "orderCount",
+          "jobsLeft",
+          "totalSpent",
+          "lastOrderAt",
+          "createdAt",
+        ],
+      },
+      CustomerList: {
+        type: "object",
+        properties: {
+          customers: {
+            type: "array",
+            items: { $ref: "#/components/schemas/CustomerSummary" },
+          },
+          total: { type: "integer", minimum: 0 },
+        },
+        required: ["customers", "total"],
       },
       JobList: {
         type: "object",

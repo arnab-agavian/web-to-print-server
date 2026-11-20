@@ -176,6 +176,27 @@ export async function deleteFile(publicUrl, user) {
   };
 }
 
+export async function downloadPublicFile(reference) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+
+  const parsed = parseUploadReference(reference);
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .download(parsed.path);
+  if (error || !data) {
+    throw storageError("Public template artwork could not be downloaded.", error);
+  }
+  return {
+    bucket: parsed.bucket,
+    path: parsed.path,
+    buffer: Buffer.from(await data.arrayBuffer()),
+  };
+}
+
 export function validateFileSignature(file) {
   const type = fileTypes[file.mimetype];
   if (!type || !type.matches(file.buffer)) {

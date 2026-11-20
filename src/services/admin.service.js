@@ -3,6 +3,151 @@ import { env } from "../config/env.js";
 import { demoOrders } from "../data/demoStore.js";
 import { notifyOrderStatusChanged } from "./notification.service.js";
 
+const closedStatuses = ["completed", "cancelled"];
+const jobItemInclude = {
+  product: { select: { id: true, name: true, family: true } },
+  design: {
+    select: {
+      id: true,
+      name: true,
+      designData: true,
+      previewPath: true,
+      sourceFilePath: true,
+      status: true,
+      template: {
+        select: {
+          id: true,
+          name: true,
+          canvasWidth: true,
+          canvasHeight: true,
+          safeArea: true,
+          placeholderRules: true,
+          thumbnailPath: true,
+        },
+      },
+    },
+  },
+};
+
+function listDemoCustomers(filters) {
+  const customersById = new Map();
+  for (const order of demoOrders) {
+    const customer = customersById.get(order.customer_id) || {
+      id: order.customer_id,
+      email: order.customer_email,
+      fullName: order.customer_name || null,
+      companyName: null,
+      phone: null,
+      orderCount: 0,
+      jobsLeft: 0,
+      totalSpent: 0,
+      lastOrderAt: null,
+      createdAt: null,
+    };
+    customer.orderCount += 1;
+    if (!closedStatuses.includes(order.status)) customer.jobsLeft += 1;
+    customer.totalSpent += Number(order.total || 0);
+    if (!customer.lastOrderAt || order.created_at > customer.lastOrderAt) {
+      customer.lastOrderAt = order.created_at;
+    }
+    customersById.set(order.customer_id, customer);
+  }
+
+  let customers = [...customersById.values()].sort((a, b) =>
+    String(b.lastOrderAt).localeCompare(String(a.lastOrderAt)),
+  );
+  if (filters.q) {
+    const query = filters.q.toLowerCase();
+    customers = customers.filter((customer) =>
+      [customer.email, customer.fullName, customer.companyName, customer.phone]
+        .filter(Boolean)
+        .some((field) => field.toLowerCase().includes(query)),
+    );
+  }
+  const total = customers.length;
+  return {
+    customers: customers.slice(filters.offset, filters.offset + filters.limit),
+    total,
+  };
+}
+
+export async function listCustomers(filters) {
+  if (!env.hasDatabase) return listDemoCustomers(filters);
+
+  const where = {
+    role: "customer",
+    orders: { some: {} },
+    ...(filters.q
+      ? {
+          OR: [
+            { email: { contains: filters.q, mode: "insensitive" } },
+            { fullName: { contains: filters.q, mode: "insensitive" } },
+            { companyName: { contains: filters.q, mode: "insensitive" } },
+            { phone: { contains: filters.q, mode: "insensitive" } },
+          ],
+        }
+      : {}),
+  };
+  const [profiles, total] = await prisma.$transaction([
+    prisma.profile.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        fullName: true,
+        companyName: true,
+        phone: true,
+        createdAt: true,
+      },
+      orderBy: { updatedAt: "desc" },
+      skip: filters.offset,
+      take: filters.limit,
+    }),
+    prisma.profile.count({ where }),
+  ]);
+
+  const customerIds = profiles.map((profile) => profile.id);
+  if (!customerIds.length) return { customers: [], total };
+
+  const [orderStats, unfinishedStats] = await prisma.$transaction([
+    prisma.order.groupBy({
+      by: ["customerId"],
+      where: { customerId: { in: customerIds } },
+      _count: { _all: true },
+      _sum: { total: true },
+      _max: { createdAt: true },
+    }),
+    prisma.order.groupBy({
+      by: ["customerId"],
+      where: {
+        customerId: { in: customerIds },
+        status: { notIn: closedStatuses },
+      },
+      _count: { _all: true },
+    }),
+  ]);
+  const statsByCustomer = new Map(
+    orderStats.map((stats) => [stats.customerId, stats]),
+  );
+  const unfinishedByCustomer = new Map(
+    unfinishedStats.map((stats) => [stats.customerId, stats._count._all]),
+  );
+
+  return {
+    customers: profiles.map((profile) => {
+      const stats = statsByCustomer.get(profile.id);
+      return {
+        ...profile,
+        orderCount: stats?._count._all || 0,
+        jobsLeft: unfinishedByCustomer.get(profile.id) || 0,
+        totalSpent: Number(stats?._sum.total || 0),
+        lastOrderAt: stats?._max.createdAt || null,
+      };
+    }),
+    total,
+  };
+}
+
 export async function listJobs(filters) {
   if (!env.hasDatabase) {
     let rows = demoOrders;
@@ -38,7 +183,7 @@ export async function listJobs(filters) {
       include: {
         customer: { select: { fullName: true, email: true } },
         items: {
-          include: { product: { select: { name: true, family: true } } },
+          include: jobItemInclude,
         },
         proofs: { orderBy: { version: "desc" }, take: 1 },
       },
@@ -143,6 +288,15 @@ export async function getProductionOrder(id) {
     return demoOrders.find((order) => order.id === id) || null;
   return prisma.order.findUnique({
     where: { id },
-    include: { items: { include: { product: { select: { name: true } } } } },
+    include: {
+      customer: { select: { fullName: true, email: true } },
+      items: { include: jobItemInclude, orderBy: { createdAt: "asc" } },
+      proofs: {
+        where: { status: "approved" },
+        orderBy: { version: "desc" },
+        take: 1,
+      },
+      productionFiles: true,
+    },
   });
 }

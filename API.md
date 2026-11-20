@@ -46,9 +46,10 @@ Base URL: `http://localhost:4000/api`
 | POST | `/proofs/:id/approve` | Customer | Approve exact proof version |
 | POST | `/proofs/:id/change-request` | Customer | Request a revision |
 | POST | `/proofs/orders/:orderId` | Admin | Add versioned proof |
-| GET | `/admin/jobs` | Admin | Searchable production queue |
+| GET | `/admin/customers` | Admin | List customers with orders, order counts, and unfinished job counts |
+| GET | `/admin/jobs` | Admin | Searchable production queue with design/template placeholder and thumbnail data |
 | PUT | `/admin/jobs/:id/status` | Admin | Advance pipeline with approval gate |
-| GET | `/admin/jobs/:id/production-file` | Admin | Generate/download production PDF |
+| GET | `/admin/jobs/:id/production-file` | Admin | Render/download print-size template artwork with that order's placeholder values |
 | GET | `/admin/analytics` | Admin | Order and revenue metrics |
 
 Send Supabase access tokens as `Authorization: Bearer <token>`. In local demo mode, omit the token; customer access is assumed. For admin endpoints only, add `x-demo-role: admin`.

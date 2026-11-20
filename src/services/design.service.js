@@ -12,6 +12,7 @@ const designInclude = {
       canvasWidth: true,
       canvasHeight: true,
       safeArea: true,
+      placeholderRules: true,
       thumbnailPath: true,
       active: true,
     },

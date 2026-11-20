@@ -1,7 +1,8 @@
 import {Router} from 'express';
-import {downloadProductionFile,getAnalytics,getJobs,updateStatus} from '../controllers/admin.controller.js';
+import {downloadProductionFile,getAnalytics,getCustomers,getJobs,updateStatus} from '../controllers/admin.controller.js';
 import {requireRole,verifyToken} from '../middlewares/auth.middleware.js';
 const router=Router();router.use(verifyToken,requireRole('admin'));
+router.get('/customers',getCustomers);
 router.get('/jobs',getJobs);
 router.put('/jobs/:id/status',updateStatus);
 router.get('/jobs/:id/production-file',downloadProductionFile);

@@ -51,6 +51,7 @@ test("Swagger exposes every API operation", () => {
     ["/proofs/orders/{orderId}", "post"],
     ["/proofs/{id}/approve", "post"],
     ["/proofs/{id}/change-request", "post"],
+    ["/admin/customers", "get"],
     ["/admin/jobs", "get"],
     ["/admin/jobs/{id}/status", "put"],
     ["/admin/jobs/{id}/production-file", "get"],

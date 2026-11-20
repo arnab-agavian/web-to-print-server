@@ -10,7 +10,7 @@ prisma/
 src/
   config/          Prisma and environment configuration
   controllers/     HTTP request/response handling
-  data/            Demo catalogue and in-memory fallback
+  data/            In-memory fixtures for non-product demo workflows
   middlewares/     Supabase auth, role checks and errors
   routes/          Express routes only
   services/        Prisma queries and business rules
@@ -38,7 +38,7 @@ The backend exposes `/api/auth/signup`, `/api/auth/login`, `/api/auth/refresh`, 
 
 Order, proof and production-status notifications use Resend. Set `EMAIL_ENABLED=true`, `RESEND_API_KEY`, `EMAIL_FROM` and `ADMIN_NOTIFICATION_EMAIL` in `.env`. `EMAIL_FROM` must use a sender/domain verified in Resend. Email delivery failures are logged and do not roll back successful order or proof transactions.
 
-With `DEMO_MODE=true` and no database URL, the API starts with in-memory data for frontend review.
+With `DEMO_MODE=true`, the API can still use in-memory fixtures for frontend review, but all product catalogue, detail, pricing and creation operations require `DATABASE_URL` and read from PostgreSQL.
 
 ## Scripts
 

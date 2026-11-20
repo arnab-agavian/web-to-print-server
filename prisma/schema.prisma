@@ -21,6 +21,8 @@ model Profile {
   proofsCreated  Proof[]      @relation("ProofCreatedBy")
   proofsApproved Proof[]      @relation("ProofApprovedBy")
   orderEvents    OrderEvent[]
+  cart           Cart?
+  addresses      Address[]
 
   @@map("profiles")
 }
@@ -49,8 +51,61 @@ model Product {
   templates           Template[]
   designs             Design[]
   orderItems          OrderItem[]
+  cartItems           CartItem[]
 
   @@map("products")
+}
+
+model Address {
+  id            String   @id @default(uuid()) @db.Uuid
+  customerId    String   @map("customer_id") @db.Uuid
+  label         String   @default("Home")
+  recipientName String   @map("recipient_name")
+  phone         String
+  addressLine1  String   @map("address_line_1")
+  addressLine2  String?  @map("address_line_2")
+  city          String
+  state         String
+  postalCode    String   @map("postal_code")
+  countryCode   String   @default("IN") @map("country_code") @db.Char(2)
+  isDefault     Boolean  @default(false) @map("is_default")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer      Profile  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, updatedAt(sort: Desc)])
+  @@map("addresses")
+}
+
+model Cart {
+  id         String     @id @default(uuid()) @db.Uuid
+  customerId String     @unique @map("customer_id") @db.Uuid
+  createdAt  DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime   @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  customer   Profile    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      CartItem[]
+
+  @@map("carts")
+}
+
+model CartItem {
+  id                 String   @id @default(uuid()) @db.Uuid
+  cartId             String   @map("cart_id") @db.Uuid
+  productId          String   @map("product_id") @db.Uuid
+  quantity           Int
+  widthMm            Decimal  @map("width_mm") @db.Decimal(10, 2)
+  heightMm           Decimal  @map("height_mm") @db.Decimal(10, 2)
+  material           String
+  materialMultiplier Decimal  @default(1) @map("material_multiplier") @db.Decimal(6, 3)
+  configuration      Json     @default("{}")
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  cart               Cart     @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  product            Product  @relation(fields: [productId], references: [id])
+
+  @@index([cartId])
+  @@index([productId])
+  @@map("cart_items")
 }
 
 model Template {

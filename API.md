@@ -11,7 +11,27 @@ Base URL: `http://localhost:4000/api`
 | POST | `/auth/logout` | Customer/Admin | Revoke all sessions |
 | GET | `/auth/me` | Customer/Admin | Fetch the authenticated user and role |
 | GET | `/products` | Public | Active parameter-driven catalogue |
+| POST | `/products` | Admin | Create a database-backed product |
+| GET | `/products/:slug` | Public | Fetch one active product from the catalogue |
+| PATCH | `/products/:slug` | Admin | Update a database-backed product |
 | POST | `/products/price` | Public | Server-authoritative live price |
+| GET | `/products/:slug/templates` | Public | List active templates for an active product |
+| POST | `/products/:slug/templates` | Admin | Create a template for a product |
+| GET | `/templates/:id` | Public | Fetch one active template |
+| PATCH | `/templates/:id` | Admin | Update a template |
+| DELETE | `/templates/:id` | Admin | Delete a template |
+| POST | `/files/upload` | Customer/Admin | Upload one private file and receive a signed URL |
+| GET | `/cart` | Customer | Fetch own cart with current prices and totals |
+| DELETE | `/cart` | Customer | Clear all items from own cart |
+| POST | `/cart/items` | Customer | Add a configured product to own cart |
+| PATCH | `/cart/items/:id` | Customer | Update an owned cart item |
+| DELETE | `/cart/items/:id` | Customer | Remove an owned cart item |
+| GET | `/addresses` | Customer | List owned delivery addresses |
+| POST | `/addresses` | Customer | Create a delivery address |
+| GET | `/addresses/:id` | Customer | Fetch one owned address |
+| PATCH | `/addresses/:id` | Customer | Update one owned address |
+| DELETE | `/addresses/:id` | Customer | Delete one owned address |
+| PATCH | `/addresses/:id/default` | Customer | Make an owned address the default |
 | GET | `/orders` | Customer | Own order history |
 | POST | `/orders` | Customer | Capture a priced order |
 | GET | `/orders/:id` | Customer | Fetch one owned order |

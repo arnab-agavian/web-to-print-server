@@ -13,7 +13,7 @@ router.use(verifyToken);
 router.get("/", getCart);
 router.delete("/", clearCart);
 router.post("/items", addCartItem);
-router.patch("/items/:id", updateCartItem);
+router.put("/items/:id", updateCartItem);
 router.delete("/items/:id", removeCartItem);
 
 export default router;

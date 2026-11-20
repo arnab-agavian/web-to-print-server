@@ -66,7 +66,8 @@ export const swaggerSpec = {
     { name: "Authentication", description: "Supabase account and session lifecycle" },
     { name: "Products", description: "Product catalogue and pricing" },
     { name: "Templates", description: "Product canvas templates" },
-    { name: "Files", description: "Private Supabase Storage uploads" },
+    { name: "Designs", description: "Customer-owned artwork and editor state" },
+    { name: "Files", description: "Public Supabase Storage uploads" },
     { name: "Cart", description: "Customer shopping cart" },
     { name: "Addresses", description: "Customer delivery address book" },
     { name: "Orders", description: "Customer orders" },
@@ -281,7 +282,7 @@ export const swaggerSpec = {
           503: errorResponse("Database is not configured."),
         },
       },
-      patch: {
+      put: {
         tags: ["Products"],
         summary: "Update a product",
         description:
@@ -429,7 +430,7 @@ export const swaggerSpec = {
           503: errorResponse("Database is not configured."),
         },
       },
-      patch: {
+      put: {
         tags: ["Templates"],
         summary: "Update a template",
         description: "Admin only. Validates the safe area against the complete resulting canvas.",
@@ -476,12 +477,172 @@ export const swaggerSpec = {
         },
       },
     },
+    "/designs": {
+      get: {
+        tags: ["Designs"],
+        summary: "List the current customer's designs",
+        operationId: "getDesigns",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          {
+            name: "status",
+            in: "query",
+            required: false,
+            schema: { $ref: "#/components/schemas/DesignStatus" },
+          },
+          {
+            name: "productId",
+            in: "query",
+            required: false,
+            schema: { type: "string", format: "uuid" },
+          },
+        ],
+        responses: {
+          200: dataResponse("Owned designs, newest update first.", {
+            type: "array",
+            items: { $ref: "#/components/schemas/Design" },
+          }),
+          400: errorResponse("Invalid filter."),
+          401: errorResponse("Authentication required."),
+          503: errorResponse("Database is not configured."),
+        },
+      },
+      post: {
+        tags: ["Designs"],
+        summary: "Create a design",
+        description:
+          "Creates customer-owned editor state. When supplied, the template must be active and belong to the selected active product.",
+        operationId: "createDesign",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: jsonContent(
+            { $ref: "#/components/schemas/CreateDesignRequest" },
+            {
+              productId: "20520000-0000-4000-8000-000000000001",
+              templateId: "20520000-0000-4000-8000-000000000002",
+              name: "Race board 42",
+              designData: {
+                layers: [{ type: "text", value: "42" }],
+              },
+              status: "draft",
+            },
+          ),
+        },
+        responses: {
+          201: dataResponse("Created design.", { $ref: "#/components/schemas/Design" }),
+          400: errorResponse("Validation failed or the template does not match the product."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Product not found."),
+          503: errorResponse("Database is not configured."),
+        },
+      },
+    },
+    "/designs/{id}": {
+      get: {
+        tags: ["Designs"],
+        summary: "Get an owned design",
+        operationId: "getDesign",
+        security: [{ bearerAuth: [] }],
+        parameters: [idParameter],
+        responses: {
+          200: dataResponse("Owned design.", { $ref: "#/components/schemas/Design" }),
+          400: errorResponse("Invalid design ID."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Design not found."),
+          503: errorResponse("Database is not configured."),
+        },
+      },
+      put: {
+        tags: ["Designs"],
+        summary: "Update an owned design",
+        description:
+          "Supports editor autosave. Product and template references are immutable after creation.",
+        operationId: "updateDesign",
+        security: [{ bearerAuth: [] }],
+        parameters: [idParameter],
+        requestBody: {
+          required: true,
+          content: jsonContent(
+            { $ref: "#/components/schemas/UpdateDesignRequest" },
+            {
+              designData: {
+                layers: [{ type: "text", value: "108" }],
+              },
+              previewPath: "artwork/customer/race-board-108.png",
+              status: "ready",
+            },
+          ),
+        },
+        responses: {
+          200: dataResponse("Updated design.", { $ref: "#/components/schemas/Design" }),
+          400: errorResponse("Validation failed."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Design not found."),
+          503: errorResponse("Database is not configured."),
+        },
+      },
+      delete: {
+        tags: ["Designs"],
+        summary: "Delete an unused owned design",
+        description:
+          "Designs referenced by an order cannot be deleted and should be archived with PUT instead.",
+        operationId: "deleteDesign",
+        security: [{ bearerAuth: [] }],
+        parameters: [idParameter],
+        responses: {
+          200: dataResponse("Deletion result.", {
+            type: "object",
+            properties: {
+              id: { type: "string", format: "uuid" },
+              deleted: { type: "boolean", enum: [true] },
+            },
+            required: ["id", "deleted"],
+          }),
+          400: errorResponse("Invalid design ID."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Design not found."),
+          409: errorResponse("Design is used by an order."),
+          503: errorResponse("Database is not configured."),
+        },
+      },
+    },
+    "/files": {
+      delete: {
+        tags: ["Files"],
+        summary: "Delete a public upload",
+        description:
+          "Deletes an object from the public `uploads` bucket using its public URL. Customers may only delete objects stored under their own user ID; admins may delete any object in the bucket.",
+        operationId: "deleteFile",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: jsonContent(
+            { $ref: "#/components/schemas/DeleteFileRequest" },
+            {
+              publicUrl:
+                "https://project.supabase.co/storage/v1/object/public/uploads/customer-uuid/artwork/design.png",
+            },
+          ),
+        },
+        responses: {
+          200: dataResponse("Deleted file metadata.", {
+            $ref: "#/components/schemas/DeleteFileResult",
+          }),
+          400: errorResponse("Invalid or non-public storage URL."),
+          401: errorResponse("Authentication required."),
+          403: errorResponse("The file is not owned by the current customer."),
+          502: errorResponse("Supabase Storage operation failed."),
+          503: errorResponse("Supabase Storage is not configured."),
+        },
+      },
+    },
     "/files/upload": {
       post: {
         tags: ["Files"],
-        summary: "Upload a private file",
+        summary: "Upload a public file",
         description:
-          "Accepts one `file` field up to 10 MB. Supported types are PNG, JPEG, WebP, and PDF. The response includes a one-hour signed URL.",
+          "Accepts one `file` field up to 10 MB. Supported types are PNG, JPEG, WebP, and PDF. The `uploads` bucket must be public. The returned `publicUrl` remains accessible while the object exists at the same path and the bucket remains public.",
         operationId: "uploadFile",
         security: [{ bearerAuth: [] }],
         requestBody: {
@@ -509,6 +670,33 @@ export const swaggerSpec = {
           401: errorResponse("Authentication required."),
           413: errorResponse("File exceeds the 10 MB limit."),
           415: errorResponse("Unsupported type or invalid file signature."),
+          502: errorResponse("Supabase Storage operation failed."),
+          503: errorResponse("Supabase Storage is not configured."),
+        },
+      },
+    },
+    "/files/signed-url": {
+      post: {
+        tags: ["Files"],
+        summary: "Refresh an expired upload URL",
+        description:
+          "Creates a new one-hour signed URL for an owned upload. The request may contain the permanent path returned by upload or an old Supabase signed URL. Refresh the login session first if the API access token has also expired.",
+        operationId: "refreshSignedUrl",
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: jsonContent(
+            { $ref: "#/components/schemas/RefreshSignedUrlRequest" },
+            { path: "customer-uuid/artwork/design-preview.png" },
+          ),
+        },
+        responses: {
+          200: dataResponse("Fresh signed URL.", {
+            $ref: "#/components/schemas/SignedUrlResult",
+          }),
+          400: errorResponse("Invalid storage path or URL."),
+          401: errorResponse("Authentication required."),
+          403: errorResponse("The file is not owned by the current customer."),
           502: errorResponse("Supabase Storage operation failed."),
           503: errorResponse("Supabase Storage is not configured."),
         },
@@ -570,7 +758,7 @@ export const swaggerSpec = {
       },
     },
     "/cart/items/{id}": {
-      patch: {
+      put: {
         tags: ["Cart"],
         summary: "Update an owned cart item",
         operationId: "updateCartItem",
@@ -669,7 +857,7 @@ export const swaggerSpec = {
           503: errorResponse("Database is not configured."),
         },
       },
-      patch: {
+      put: {
         tags: ["Addresses"],
         summary: "Update an owned delivery address",
         operationId: "updateAddress",
@@ -714,7 +902,7 @@ export const swaggerSpec = {
       },
     },
     "/addresses/{id}/default": {
-      patch: {
+      put: {
         tags: ["Addresses"],
         summary: "Make an owned address the default",
         operationId: "setDefaultAddress",
@@ -746,7 +934,9 @@ export const swaggerSpec = {
       },
       post: {
         tags: ["Orders"],
-        summary: "Place an order",
+        summary: "Place a multi-product order",
+        description:
+          "Validates and prices every line, then creates the order and all order items atomically.",
         operationId: "placeOrder",
         security: [{ bearerAuth: [] }],
         requestBody: {
@@ -754,13 +944,27 @@ export const swaggerSpec = {
           content: jsonContent(
             { $ref: "#/components/schemas/CreateOrderRequest" },
             {
-              productSlug: "labels",
-              width: 100,
-              height: 100,
-              quantity: 100,
-              material: "Premium vinyl",
-              materialMultiplier: 1,
-              configuration: { finish: "gloss" },
+              items: [
+                {
+                  productSlug: "labels",
+                  width: 100,
+                  height: 100,
+                  quantity: 100,
+                  material: "Premium vinyl",
+                  materialMultiplier: 1,
+                  configuration: { finish: "gloss" },
+                },
+                {
+                  productSlug: "stamps",
+                  width: 70,
+                  height: 35,
+                  quantity: 2,
+                  material: "Rubber + ink",
+                  materialMultiplier: 1,
+                  configuration: { inkColour: "black" },
+                },
+              ],
+              configuration: { delivery: "standard" },
             },
           ),
         },
@@ -769,13 +973,14 @@ export const swaggerSpec = {
             type: "object",
             properties: {
               order: { $ref: "#/components/schemas/Order" },
-              price: { $ref: "#/components/schemas/Price" },
+              price: { $ref: "#/components/schemas/OrderPrice" },
             },
           }),
-          400: errorResponse("Validation failed."),
+          400: errorResponse("Validation, pricing, or design ownership failed."),
           401: errorResponse("Authentication required."),
           404: errorResponse("Product not found."),
           500: errorResponse("Unexpected server error."),
+          503: errorResponse("Database is not configured for referenced designs."),
         },
       },
     },
@@ -910,7 +1115,7 @@ export const swaggerSpec = {
       },
     },
     "/admin/jobs/{id}/status": {
-      patch: {
+      put: {
         tags: ["Admin"],
         summary: "Update a production job status",
         description: "Moving a job to production requires an approved proof.",
@@ -1274,13 +1479,87 @@ export const swaggerSpec = {
           active: { type: "boolean" },
         },
       },
+      DesignStatus: {
+        type: "string",
+        enum: ["draft", "ready", "archived"],
+      },
+      DesignProduct: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          slug: { type: "string" },
+          name: { type: "string" },
+          family: { type: "string" },
+          active: { type: "boolean" },
+        },
+        required: ["id", "slug", "name", "family", "active"],
+      },
+      DesignTemplate: {
+        type: "object",
+        nullable: true,
+        properties: {
+          id: { type: "string", format: "uuid" },
+          name: { type: "string" },
+          canvasWidth: { type: "number" },
+          canvasHeight: { type: "number" },
+          safeArea: { $ref: "#/components/schemas/SafeArea" },
+          thumbnailPath: { type: "string", nullable: true },
+          active: { type: "boolean" },
+        },
+        required: ["id", "name", "canvasWidth", "canvasHeight", "safeArea", "active"],
+      },
+      Design: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          customerId: { type: "string", format: "uuid" },
+          productId: { type: "string", format: "uuid" },
+          templateId: { type: "string", format: "uuid", nullable: true },
+          name: { type: "string" },
+          designData: { type: "object", additionalProperties: true },
+          previewPath: { type: "string", nullable: true },
+          sourceFilePath: { type: "string", nullable: true },
+          status: { $ref: "#/components/schemas/DesignStatus" },
+          product: { $ref: "#/components/schemas/DesignProduct" },
+          template: { $ref: "#/components/schemas/DesignTemplate" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+        required: ["id", "customerId", "productId", "name", "designData", "status", "product", "createdAt", "updatedAt"],
+      },
+      CreateDesignRequest: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          productId: { type: "string", format: "uuid" },
+          templateId: { type: "string", format: "uuid", nullable: true },
+          name: { type: "string", minLength: 1, maxLength: 200 },
+          designData: { type: "object", additionalProperties: true, default: {} },
+          previewPath: { type: "string", minLength: 1, maxLength: 1000, nullable: true },
+          sourceFilePath: { type: "string", minLength: 1, maxLength: 1000, nullable: true },
+          status: { $ref: "#/components/schemas/DesignStatus" },
+        },
+        required: ["productId", "name"],
+      },
+      UpdateDesignRequest: {
+        type: "object",
+        additionalProperties: false,
+        minProperties: 1,
+        properties: {
+          name: { type: "string", minLength: 1, maxLength: 200 },
+          designData: { type: "object", additionalProperties: true },
+          previewPath: { type: "string", minLength: 1, maxLength: 1000, nullable: true },
+          sourceFilePath: { type: "string", minLength: 1, maxLength: 1000, nullable: true },
+          status: { $ref: "#/components/schemas/DesignStatus" },
+        },
+      },
       FileUploadResult: {
         type: "object",
         properties: {
           bucket: { type: "string", enum: ["uploads"] },
           path: {
             type: "string",
-            description: "User-scoped permanent storage path. Save this value instead of the expiring signed URL.",
+            description: "User-scoped permanent storage path.",
           },
           originalName: { type: "string" },
           mimeType: {
@@ -1292,10 +1571,59 @@ export const swaggerSpec = {
             type: "string",
             enum: ["general", "products", "templates", "artwork", "proofs"],
           },
+          publicUrl: {
+            type: "string",
+            format: "uri",
+            description: "Public, non-expiring URL for the uploaded object.",
+          },
+        },
+        required: ["bucket", "path", "originalName", "mimeType", "size", "category", "publicUrl"],
+      },
+      DeleteFileRequest: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          publicUrl: {
+            type: "string",
+            format: "uri",
+            maxLength: 4000,
+          },
+        },
+        required: ["publicUrl"],
+      },
+      DeleteFileResult: {
+        type: "object",
+        properties: {
+          bucket: { type: "string", enum: ["uploads"] },
+          path: { type: "string" },
+          publicUrl: { type: "string", format: "uri" },
+          deleted: { type: "boolean", enum: [true] },
+        },
+        required: ["bucket", "path", "publicUrl", "deleted"],
+      },
+      RefreshSignedUrlRequest: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: {
+            type: "string",
+            minLength: 1,
+            maxLength: 4000,
+            description: "Permanent upload path or an old Supabase signed URL.",
+          },
+        },
+        required: ["path"],
+      },
+      SignedUrlResult: {
+        type: "object",
+        properties: {
+          bucket: { type: "string", enum: ["uploads"] },
+          path: { type: "string" },
           signedUrl: { type: "string", format: "uri" },
           signedUrlExpiresIn: { type: "integer", enum: [3600] },
+          signedUrlExpiresAt: { type: "string", format: "date-time" },
         },
-        required: ["bucket", "path", "originalName", "mimeType", "size", "category", "signedUrl", "signedUrlExpiresIn"],
+        required: ["bucket", "path", "signedUrl", "signedUrlExpiresIn", "signedUrlExpiresAt"],
       },
       PriceRequest: {
         type: "object",
@@ -1309,17 +1637,38 @@ export const swaggerSpec = {
         required: ["productSlug", "width", "height", "quantity"],
       },
       CreateOrderRequest: {
-        allOf: [
-          { $ref: "#/components/schemas/PriceRequest" },
-          {
-            type: "object",
-            properties: {
-              material: { type: "string", minLength: 1, default: "standard" },
-              designId: { type: "string", format: "uuid" },
-              configuration: { type: "object", additionalProperties: true, default: {} },
-            },
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          items: {
+            type: "array",
+            minItems: 1,
+            maxItems: 50,
+            items: { $ref: "#/components/schemas/CreateOrderItemRequest" },
           },
-        ],
+          configuration: {
+            type: "object",
+            additionalProperties: true,
+            default: {},
+            description: "Order-level options shared by all lines.",
+          },
+        },
+        required: ["items"],
+      },
+      CreateOrderItemRequest: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          productSlug: { type: "string", minLength: 1, maxLength: 100 },
+          width: { type: "number", exclusiveMinimum: true, minimum: 0 },
+          height: { type: "number", exclusiveMinimum: true, minimum: 0 },
+          quantity: { type: "integer", minimum: 1 },
+          material: { type: "string", minLength: 1, maxLength: 200, default: "standard" },
+          materialMultiplier: { type: "number", minimum: 0.5, maximum: 3, default: 1 },
+          designId: { type: "string", format: "uuid", nullable: true },
+          configuration: { type: "object", additionalProperties: true, default: {} },
+        },
+        required: ["productSlug", "width", "height", "quantity"],
       },
       Price: {
         type: "object",
@@ -1335,6 +1684,36 @@ export const swaggerSpec = {
           height: { type: "number", example: 100 },
         },
         required: ["currency", "unitPrice", "subtotal", "tax", "total", "discountPercent", "quantity", "width", "height"],
+      },
+      OrderPriceLine: {
+        allOf: [
+          { $ref: "#/components/schemas/Price" },
+          {
+            type: "object",
+            properties: {
+              index: { type: "integer", minimum: 0 },
+              productId: { type: "string", format: "uuid" },
+              productSlug: { type: "string" },
+            },
+            required: ["index", "productId", "productSlug"],
+          },
+        ],
+      },
+      OrderPrice: {
+        type: "object",
+        properties: {
+          currency: { type: "string", enum: ["INR"] },
+          itemCount: { type: "integer", minimum: 1 },
+          totalQuantity: { type: "integer", minimum: 1 },
+          subtotal: { type: "number", minimum: 0 },
+          tax: { type: "number", minimum: 0 },
+          total: { type: "number", minimum: 0 },
+          items: {
+            type: "array",
+            items: { $ref: "#/components/schemas/OrderPriceLine" },
+          },
+        },
+        required: ["currency", "itemCount", "totalQuantity", "subtotal", "tax", "total", "items"],
       },
       AddCartItemRequest: {
         type: "object",

@@ -12,16 +12,18 @@ import productRoutes from "./routes/product.routes.js";
 import cartRoutes from "./routes/cart.routes.js";
 import addressRoutes from "./routes/address.routes.js";
 import templateRoutes from "./routes/template.routes.js";
+import designRoutes from "./routes/design.routes.js";
 import fileRoutes from "./routes/file.routes.js";
 import orderRoutes from "./routes/order.routes.js";
 import proofRoutes from "./routes/proof.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import { notFound } from "./middlewares/notFound.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
-import { sendSuccess } from "./utils/response.js";
+import { jsonReplacer, sendSuccess } from "./utils/response.js";
 
 const app = express();
 app.disable("x-powered-by");
+app.set("json replacer", jsonReplacer);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
   cors({
@@ -83,6 +85,7 @@ app.use("/api/products", productRoutes);
 app.use("/api/cart", cartRoutes);
 app.use("/api/addresses", addressRoutes);
 app.use("/api/templates", templateRoutes);
+app.use("/api/designs", designRoutes);
 app.use("/api/files", fileRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/proofs", proofRoutes);

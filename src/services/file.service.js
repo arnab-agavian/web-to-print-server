@@ -41,6 +41,141 @@ function storageError(message, cause) {
   return error;
 }
 
+function invalidStorageReference(message) {
+  const error = new Error(message);
+  error.status = 400;
+  return error;
+}
+
+function decodePath(pathname) {
+  try {
+    return pathname
+      .split("/")
+      .map((segment) => decodeURIComponent(segment))
+      .join("/");
+  } catch {
+    throw invalidStorageReference("The storage path is not valid URL encoding.");
+  }
+}
+
+function assertUploadAccess(parsed, user) {
+  if (user.role !== "admin" && parsed.ownerId !== user.id) {
+    const error = new Error("You do not have access to this file.");
+    error.status = 403;
+    throw error;
+  }
+}
+
+export function parseUploadReference(reference) {
+  const input = String(reference || "").trim();
+  let bucket = UPLOAD_BUCKET;
+  let storagePath = input;
+
+  if (/^https?:\/\//i.test(input)) {
+    let url;
+    try {
+      url = new URL(input);
+    } catch {
+      throw invalidStorageReference("The signed URL is invalid.");
+    }
+    const match = url.pathname.match(
+      /^\/storage\/v1\/object\/(?:sign|public|authenticated)\/([^/]+)\/(.+)$/,
+    );
+    if (!match) {
+      throw invalidStorageReference("The URL is not a Supabase Storage URL.");
+    }
+    bucket = decodePath(match[1]);
+    storagePath = decodePath(match[2]);
+  } else {
+    storagePath = input.replace(/^\/+/, "");
+    if (storagePath.startsWith(`${UPLOAD_BUCKET}/`)) {
+      storagePath = storagePath.slice(UPLOAD_BUCKET.length + 1);
+    }
+  }
+
+  if (bucket !== UPLOAD_BUCKET) {
+    throw invalidStorageReference(
+      `Only files in the ${UPLOAD_BUCKET} bucket can be refreshed here.`,
+    );
+  }
+  const segments = storagePath.split("/");
+  if (
+    !storagePath ||
+    storagePath.includes("\\") ||
+    segments.some(
+      (segment) =>
+        !segment || segment === "." || segment === ".." || /[\u0000-\u001f]/.test(segment),
+    )
+  ) {
+    throw invalidStorageReference("The storage path is invalid.");
+  }
+
+  return { bucket, path: storagePath, ownerId: segments[0] };
+}
+
+export async function refreshSignedUrl(reference, user) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+
+  const parsed = parseUploadReference(reference);
+  assertUploadAccess(parsed, user);
+
+  const { data, error } = await supabase.storage
+    .from(parsed.bucket)
+    .createSignedUrl(parsed.path, SIGNED_URL_TTL_SECONDS);
+  if (error || !data?.signedUrl) {
+    throw storageError("A fresh signed URL could not be created.", error);
+  }
+
+  return {
+    bucket: parsed.bucket,
+    path: parsed.path,
+    signedUrl: data.signedUrl,
+    signedUrlExpiresIn: SIGNED_URL_TTL_SECONDS,
+    signedUrlExpiresAt: new Date(
+      Date.now() + SIGNED_URL_TTL_SECONDS * 1000,
+    ).toISOString(),
+  };
+}
+
+export async function deleteFile(publicUrl, user) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+
+  let url;
+  try {
+    url = new URL(publicUrl);
+  } catch {
+    throw invalidStorageReference("A valid public file URL is required.");
+  }
+  if (!/^\/storage\/v1\/object\/public\//.test(url.pathname)) {
+    throw invalidStorageReference("A Supabase public object URL is required.");
+  }
+
+  const parsed = parseUploadReference(publicUrl);
+  assertUploadAccess(parsed, user);
+
+  const bucket = supabase.storage.from(parsed.bucket);
+  const { error } = await bucket.remove([parsed.path]);
+  if (error) {
+    throw storageError("File deletion failed.", error);
+  }
+
+  const { data: publicUrlData } = bucket.getPublicUrl(parsed.path);
+  return {
+    bucket: parsed.bucket,
+    path: parsed.path,
+    publicUrl: publicUrlData.publicUrl,
+    deleted: true,
+  };
+}
+
 export function validateFileSignature(file) {
   const type = fileTypes[file.mimetype];
   if (!type || !type.matches(file.buffer)) {
@@ -77,14 +212,7 @@ export async function uploadFile(file, metadata, user) {
     throw storageError("File upload failed.", uploadError);
   }
 
-  const { data: signed, error: signedError } = await bucket.createSignedUrl(
-    storagePath,
-    SIGNED_URL_TTL_SECONDS,
-  );
-  if (signedError) {
-    await bucket.remove([storagePath]);
-    throw storageError("File uploaded but its signed URL could not be created.", signedError);
-  }
+  const { data: publicUrlData } = bucket.getPublicUrl(storagePath);
 
   return {
     bucket: UPLOAD_BUCKET,
@@ -93,7 +221,6 @@ export async function uploadFile(file, metadata, user) {
     mimeType: file.mimetype,
     size: file.size,
     category: metadata.category,
-    signedUrl: signed.signedUrl,
-    signedUrlExpiresIn: SIGNED_URL_TTL_SECONDS,
+    publicUrl: publicUrlData.publicUrl,
   };
 }

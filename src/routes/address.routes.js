@@ -14,8 +14,8 @@ router.use(verifyToken);
 router.get("/", getAddresses);
 router.post("/", createAddress);
 router.get("/:id", getAddress);
-router.patch("/:id", updateAddress);
+router.put("/:id", updateAddress);
 router.delete("/:id", deleteAddress);
-router.patch("/:id/default", setDefaultAddress);
+router.put("/:id/default", setDefaultAddress);
 
 export default router;

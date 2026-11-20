@@ -1,3 +1,7 @@
+export function jsonReplacer(_key, value) {
+  return typeof value === "bigint" ? value.toString() : value;
+}
+
 export function sendSuccess(res, status, message, data = null) {
   return res
     .status(status)

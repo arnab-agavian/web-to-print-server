@@ -48,11 +48,13 @@ Base URL: `http://localhost:4000/api`
 | POST | `/proofs/orders/:orderId` | Admin | Add versioned proof |
 | GET | `/admin/customers` | Admin | List customers with orders, order counts, and unfinished job counts |
 | GET | `/admin/jobs` | Admin | Searchable production queue with design/template placeholder and thumbnail data |
-| PUT | `/admin/jobs/:id/status` | Admin | Advance pipeline with approval gate |
-| GET | `/admin/jobs/:id/production-file` | Admin | Render/download print-size template artwork with that order's placeholder values |
+| PUT | `/admin/jobs/:id/status` | Admin | Advance pipeline by order UUID or order number, with approval gate |
+| GET | `/admin/jobs/:id/production-file` | Admin | Generate once, privately store, record, and download order artwork rendered from its template and placeholder values |
 | GET | `/admin/analytics` | Admin | Order and revenue metrics |
 
 Send Supabase access tokens as `Authorization: Bearer <token>`. In local demo mode, omit the token; customer access is assumed. For admin endpoints only, add `x-demo-role: admin`.
+
+Production PDFs are stored in the private Supabase bucket configured by `SUPABASE_PRODUCTION_BUCKET` (default: `production`). Apply `supabase/schema.sql` or create this private bucket before generating a production file.
 
 Interactive Swagger UI: `http://localhost:4000/api/docs`  
 OpenAPI JSON: `http://localhost:4000/api/docs.json`

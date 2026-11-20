@@ -26,6 +26,23 @@ function valuesFromLayers(layers) {
   );
 }
 
+function layerKey(layer) {
+  return layer?.placeholder || layer?.name || layer?.key || layer?.id;
+}
+
+function placeholderEntries(rawRules) {
+  if (Array.isArray(rawRules)) {
+    return rawRules.map((rule, index) => [layerKey(rule) || `placeholder_${index + 1}`, rule]);
+  }
+  const rules = objectValue(rawRules);
+  const nested = rules.placeholders ?? rules.layers;
+  if (Array.isArray(nested)) {
+    return nested.map((rule, index) => [layerKey(rule) || `placeholder_${index + 1}`, rule]);
+  }
+  if (nested && typeof nested === "object") return Object.entries(nested);
+  return Object.entries(rules);
+}
+
 export function getProductionItemDetails(order) {
   const items = order?.items?.length ? order.items : [order];
   const approvedProof = order?.proofs?.[0];
@@ -36,11 +53,17 @@ export function getProductionItemDetails(order) {
     const designData = objectValue(first(design, "designData", "design_data"));
     const orderConfiguration = objectValue(order?.configuration);
     const itemConfiguration = objectValue(item?.configuration);
-    const placeholderRules = objectValue(
-      first(template, "placeholderRules", "placeholder_rules"),
+    const rawPlaceholderRules = first(
+      template,
+      "placeholderRules",
+      "placeholder_rules",
     );
+    const placeholderRules = Array.isArray(rawPlaceholderRules)
+      ? rawPlaceholderRules
+      : objectValue(rawPlaceholderRules);
     const directValues = Object.fromEntries(
-      Object.keys(placeholderRules)
+      placeholderEntries(placeholderRules)
+        .map(([key]) => key)
         .map((key) => [
           key,
           designData[key] ?? itemConfiguration[key] ?? orderConfiguration[key],
@@ -73,14 +96,17 @@ export function getProductionItemDetails(order) {
       widthMm: first(item, "widthMm", "width_mm"),
       heightMm: first(item, "heightMm", "height_mm"),
       material: first(item, "material"),
+      designId: first(design, "id"),
       designName: first(design, "name"),
       designPreviewPath: first(design, "previewPath", "preview_path"),
       approvedProofPath: first(approvedProof, "previewPath", "preview_path"),
       templateName: first(template, "name"),
+      templateId: first(template, "id"),
       canvasWidth,
       canvasHeight,
       safeArea: objectValue(first(template, "safeArea", "safe_area")),
       thumbnailPath: first(template, "thumbnailPath", "thumbnail_path"),
+      designLayers: Array.isArray(designData.layers) ? designData.layers : [],
       placeholderRules,
       placeholderValues,
     };
@@ -88,11 +114,15 @@ export function getProductionItemDetails(order) {
 }
 
 export function getPlaceholderLayers(detail) {
-  const rules = objectValue(detail?.placeholderRules);
+  const rules = detail?.placeholderRules ?? {};
   const values = objectValue(detail?.placeholderValues);
-  const entries = Object.keys(rules).length
-    ? Object.entries(rules)
+  const configuredEntries = placeholderEntries(rules);
+  const entries = configuredEntries.length
+    ? configuredEntries
     : Object.keys(values).map((key) => [key, {}]);
+  const designLayers = Array.isArray(detail?.designLayers)
+    ? detail.designLayers
+    : [];
   const canvasWidth = numericValue(detail?.canvasWidth, 210);
   const canvasHeight = numericValue(detail?.canvasHeight, 297);
   const safeArea = {
@@ -108,27 +138,58 @@ export function getPlaceholderLayers(detail) {
 
   return entries.map(([key, rawRule], index) => {
     const rule = objectValue(rawRule);
-    const position = objectValue(rule.position);
-    const hasExplicitY = rule.y !== undefined || position.y !== undefined;
-    const value = values[key] ?? rule.defaultValue ?? rule.default ?? "";
+    const designLayer =
+      designLayers.find((layer) => layerKey(layer) === key) || {};
+    const position = {
+      ...objectValue(designLayer.position),
+      ...objectValue(rule.position),
+    };
+    const value =
+      values[key] ??
+      rule.value ??
+      designLayer.value ??
+      designLayer.text ??
+      rule.defaultValue ??
+      rule.default ??
+      "";
     return {
       key,
       value: value === null || value === undefined ? "" : String(value),
       required: Boolean(rule.required),
-      x: numericValue(rule.x ?? position.x, safeArea.x),
+      x: numericValue(rule.x ?? position.x ?? designLayer.x, safeArea.x),
       y: numericValue(
-        rule.y ?? position.y,
-        safeArea.y + (hasExplicitY ? 0 : index * fallbackHeight),
+        rule.y ?? position.y ?? designLayer.y,
+        safeArea.y + index * fallbackHeight,
       ),
-      width: numericValue(rule.width ?? position.width, safeArea.width),
-      height: numericValue(rule.height ?? position.height, fallbackHeight),
-      fontSize: numericValue(rule.fontSize ?? rule.font_size, 18),
-      color: typeof rule.color === "string" ? rule.color : "#111111",
-      align: ["left", "center", "right", "justify"].includes(rule.align)
-        ? rule.align
+      width: numericValue(
+        rule.width ?? position.width ?? designLayer.width,
+        safeArea.width,
+      ),
+      height: numericValue(
+        rule.height ?? position.height ?? designLayer.height,
+        fallbackHeight,
+      ),
+      fontSize: numericValue(
+        rule.fontSize ?? rule.font_size ?? designLayer.fontSize,
+        18,
+      ),
+      color:
+        typeof (rule.color ?? designLayer.color) === "string"
+          ? rule.color ?? designLayer.color
+          : "#111111",
+      align: ["left", "center", "right", "justify"].includes(
+        rule.align ?? designLayer.align,
+      )
+        ? rule.align ?? designLayer.align
         : "center",
-      font: typeof rule.font === "string" ? rule.font : "Helvetica",
-      rotate: numericValue(rule.rotate ?? rule.rotation, 0),
+      font:
+        typeof (rule.font ?? designLayer.font) === "string"
+          ? rule.font ?? designLayer.font
+          : "Helvetica",
+      rotate: numericValue(
+        rule.rotate ?? rule.rotation ?? designLayer.rotate ?? designLayer.rotation,
+        0,
+      ),
     };
   });
 }

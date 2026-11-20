@@ -2,6 +2,14 @@
 -- Run in a fresh Supabase SQL editor. All customer-owned tables are protected by RLS.
 create extension if not exists pgcrypto;
 
+-- Final production artwork is private and is downloaded only through the
+-- authenticated admin API. Customer uploads use the separate public bucket.
+insert into storage.buckets(id,name,public,allowed_mime_types)
+values('production','production',false,array['application/pdf'])
+on conflict(id) do update set
+  public=false,
+  allowed_mime_types=excluded.allowed_mime_types;
+
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   email text not null,

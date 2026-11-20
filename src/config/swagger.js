@@ -8,6 +8,14 @@ const idParameter = {
   schema: { type: "string" },
 };
 
+const orderReferenceParameter = {
+  name: "id",
+  in: "path",
+  required: true,
+  description: "Order UUID or human-readable order number, for example `DH-747566`.",
+  schema: { type: "string" },
+};
+
 const demoAdminHeader = {
   name: "x-demo-role",
   in: "header",
@@ -1161,7 +1169,7 @@ export const swaggerSpec = {
         description: "Moving a job to production requires an approved proof.",
         operationId: "updateJobStatus",
         security: [{ bearerAuth: [] }],
-        parameters: [idParameter, demoAdminHeader],
+        parameters: [orderReferenceParameter, demoAdminHeader],
         requestBody: {
           required: true,
           content: jsonContent(
@@ -1190,10 +1198,10 @@ export const swaggerSpec = {
         tags: ["Admin"],
         summary: "Download the production PDF",
         description:
-          "Generates one print-size artwork page per order item. The template `thumbnailPath` is used as the background and the order's design placeholder values are rendered using `placeholderRules` positions and styles.",
+          "Generates one print-size artwork page per order item, uploads the PDF to the private production bucket, creates a `production_files` record, and reuses that exact file on later downloads. The template `thumbnailPath` is used as the background and the order's design placeholder values are rendered using `placeholderRules` positions and styles.",
         operationId: "downloadProductionFile",
         security: [{ bearerAuth: [] }],
-        parameters: [idParameter, demoAdminHeader],
+        parameters: [orderReferenceParameter, demoAdminHeader],
         responses: {
           200: {
             description: "Generated production PDF.",
@@ -1202,14 +1210,20 @@ export const swaggerSpec = {
                 description: "Attachment filename.",
                 schema: { type: "string" },
               },
+              "X-Production-File-Id": {
+                description: "Database ID of the stored production file.",
+                schema: { type: "string", format: "uuid" },
+              },
             },
             content: { "application/pdf": { schema: { type: "string", format: "binary" } } },
           },
           401: errorResponse("Authentication required."),
           403: errorResponse("Admin access required."),
           404: errorResponse("Order not found."),
-          409: errorResponse("Production file is locked until proof approval."),
+          409: errorResponse("Production file is locked or has no approved proof record."),
           422: errorResponse("Required placeholder data is missing or template artwork is not PNG/JPEG."),
+          502: errorResponse("Supabase Storage operation failed."),
+          503: errorResponse("Supabase Storage is not configured."),
           500: errorResponse("Unexpected server error."),
         },
       },

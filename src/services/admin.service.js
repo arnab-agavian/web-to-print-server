@@ -4,6 +4,14 @@ import { demoOrders } from "../data/demoStore.js";
 import { notifyOrderStatusChanged } from "./notification.service.js";
 
 const closedStatuses = ["completed", "cancelled"];
+const uuidPattern =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function orderLookupWhere(reference) {
+  const value = String(reference || "").trim();
+  return uuidPattern.test(value) ? { id: value } : { orderNumber: value };
+}
+
 const jobItemInclude = {
   product: { select: { id: true, name: true, family: true } },
   design: {
@@ -186,6 +194,7 @@ export async function listJobs(filters) {
           include: jobItemInclude,
         },
         proofs: { orderBy: { version: "desc" }, take: 1 },
+        productionFiles: { orderBy: { createdAt: "desc" } },
       },
       orderBy: { createdAt: "desc" },
       skip: filters.offset,
@@ -195,9 +204,11 @@ export async function listJobs(filters) {
   ]);
   return { jobs, total };
 }
-export async function updateJobStatus(id, status, user) {
+export async function updateJobStatus(reference, status, user) {
   if (!env.hasDatabase) {
-    const order = demoOrders.find((item) => item.id === id);
+    const order = demoOrders.find(
+      (item) => item.id === reference || item.order_number === reference,
+    );
     if (!order) return null;
     if (status === "production" && !order.production_ready) {
       const error = new Error(
@@ -215,8 +226,8 @@ export async function updateJobStatus(id, status, user) {
     return order;
   }
   const order = await prisma.order.findUnique({
-    where: { id },
-    select: { productionReady: true },
+    where: orderLookupWhere(reference),
+    select: { id: true, productionReady: true },
   });
   if (!order) return null;
   if (status === "production" && !order.productionReady) {
@@ -226,13 +237,13 @@ export async function updateJobStatus(id, status, user) {
   }
   const updated = await prisma.$transaction(async (tx) => {
     const result = await tx.order.update({
-      where: { id },
+      where: { id: order.id },
       data: { status, completedAt: status === "completed" ? new Date() : null },
       include: { customer: { select: { email: true, fullName: true } } },
     });
     await tx.orderEvent.create({
       data: {
-        orderId: id,
+        orderId: order.id,
         actorId: user.id,
         eventType: "status_changed",
         metadata: { status },
@@ -283,11 +294,16 @@ export async function getMetrics() {
     completed,
   };
 }
-export async function getProductionOrder(id) {
+export async function getProductionOrder(reference) {
   if (!env.hasDatabase)
-    return demoOrders.find((order) => order.id === id) || null;
+    return (
+      demoOrders.find(
+        (order) =>
+          order.id === reference || order.order_number === reference,
+      ) || null
+    );
   return prisma.order.findUnique({
-    where: { id },
+    where: orderLookupWhere(reference),
     include: {
       customer: { select: { fullName: true, email: true } },
       items: { include: jobItemInclude, orderBy: { createdAt: "asc" } },
@@ -296,7 +312,7 @@ export async function getProductionOrder(id) {
         orderBy: { version: "desc" },
         take: 1,
       },
-      productionFiles: true,
+      productionFiles: { orderBy: { createdAt: "desc" } },
     },
   });
 }

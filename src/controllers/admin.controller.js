@@ -8,6 +8,11 @@ import {
 import { errorResponse, successResponse } from "../utils/response.js";
 import { downloadPublicFile } from "../services/file.service.js";
 import {
+  findStoredProductionFile,
+  loadStoredProductionFile,
+  persistProductionFile,
+} from "../services/production-file.service.js";
+import {
   getMissingRequiredPlaceholders,
   getPlaceholderLayers,
   getProductionItemDetails,
@@ -91,6 +96,34 @@ async function prepareProductionArtwork(details) {
   );
 }
 
+function createProductionPdf(artwork, orderNumber) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    const doc = new PDFDocument({
+      autoFirstPage: false,
+      margin: 0,
+      info: { Title: `${orderNumber} Production File` },
+    });
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+    artwork.forEach(({ detail, background }) =>
+      renderProductionArtwork(doc, detail, background),
+    );
+    doc.end();
+  });
+}
+
+function sendProductionPdf(res, fileName, buffer, productionFileId) {
+  res.setHeader("Content-Type", "application/pdf");
+  res.setHeader("Content-Disposition", `attachment; filename="${fileName}"`);
+  res.setHeader("Content-Length", buffer.length);
+  if (productionFileId) {
+    res.setHeader("X-Production-File-Id", productionFileId);
+  }
+  return res.status(200).send(buffer);
+}
+
 export async function getJobs(req, res, next) {
   try {
     return successResponse(
@@ -156,6 +189,28 @@ export async function downloadProductionFile(req, res, next) {
     }
 
     const orderNumber = order.orderNumber || order.order_number;
+    const fileName = `${orderNumber}_production.pdf`;
+    const approvedProof = order.proofs?.[0] || null;
+    if (order.orderNumber && !approvedProof) {
+      return errorResponse(
+        res,
+        409,
+        "An approved proof record is required before storing a production file.",
+      );
+    }
+    const existingFile = approvedProof
+      ? findStoredProductionFile(order, approvedProof.id)
+      : null;
+    if (existingFile) {
+      const stored = await loadStoredProductionFile(existingFile);
+      return sendProductionPdf(
+        res,
+        existingFile.fileName,
+        stored.buffer,
+        existingFile.id,
+      );
+    }
+
     const details = getProductionItemDetails(order);
     const missingPlaceholders = getMissingRequiredPlaceholders(details);
     if (missingPlaceholders.length) {
@@ -166,23 +221,31 @@ export async function downloadProductionFile(req, res, next) {
       );
     }
     const artwork = await prepareProductionArtwork(details);
-    res.setHeader("Content-Type", "application/pdf");
-    res.setHeader(
-      "Content-Disposition",
-      `attachment; filename="${orderNumber}_production.pdf"`,
-    );
-    const doc = new PDFDocument({
-      autoFirstPage: false,
-      margin: 0,
-      info: { Title: `${orderNumber} Production File` },
-    });
-    doc.on("error", next);
-    doc.pipe(res);
-    artwork.forEach(({ detail, background }) =>
-      renderProductionArtwork(doc, detail, background),
-    );
-    doc.end();
-    return undefined;
+    const buffer = await createProductionPdf(artwork, orderNumber);
+    let productionFile = null;
+    if (approvedProof) {
+      productionFile = await persistProductionFile({
+        order,
+        proof: approvedProof,
+        buffer,
+        fileName,
+        user: req.user,
+        metadata: {
+          orderNumber,
+          proofVersion: approvedProof.version,
+          renderer: "template-placeholders-v1",
+          items: details.map((detail) => ({
+            line: detail.line,
+            designId: detail.designId,
+            templateId: detail.templateId,
+            canvasWidth: detail.canvasWidth,
+            canvasHeight: detail.canvasHeight,
+            placeholderValues: detail.placeholderValues,
+          })),
+        },
+      });
+    }
+    return sendProductionPdf(res, fileName, buffer, productionFile?.id);
   } catch (error) {
     return next(error);
   }

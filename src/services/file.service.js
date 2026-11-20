@@ -197,6 +197,61 @@ export async function downloadPublicFile(reference) {
   };
 }
 
+export async function uploadStoredFile(
+  buffer,
+  { bucketName, storagePath, contentType = "application/octet-stream" },
+) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  if (!Buffer.isBuffer(buffer) || !buffer.length) {
+    const error = new Error("Generated file content is empty.");
+    error.status = 500;
+    throw error;
+  }
+
+  const bucket = supabase.storage.from(bucketName);
+  const { error } = await bucket.upload(storagePath, buffer, {
+    contentType,
+    cacheControl: "3600",
+    upsert: false,
+  });
+  if (error) throw storageError("Generated file upload failed.", error);
+  return {
+    bucket: bucketName,
+    path: storagePath,
+    size: buffer.length,
+  };
+}
+
+export async function downloadStoredFile(bucketName, storagePath) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  const { data, error } = await supabase.storage
+    .from(bucketName)
+    .download(storagePath);
+  if (error || !data) throw storageError("Stored file download failed.", error);
+  return Buffer.from(await data.arrayBuffer());
+}
+
+export async function removeStoredFile(bucketName, storagePath) {
+  if (!supabase) {
+    const error = new Error("Supabase Storage is not configured.");
+    error.status = 503;
+    throw error;
+  }
+  const { error } = await supabase.storage
+    .from(bucketName)
+    .remove([storagePath]);
+  if (error) throw storageError("Stored file cleanup failed.", error);
+  return { bucket: bucketName, path: storagePath, deleted: true };
+}
+
 export function validateFileSignature(file) {
   const type = fileTypes[file.mimetype];
   if (!type || !type.matches(file.buffer)) {

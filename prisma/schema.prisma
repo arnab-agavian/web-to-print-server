@@ -23,8 +23,27 @@ model Profile {
   orderEvents    OrderEvent[]
   cart           Cart?
   addresses      Address[]
+  notifications  Notification[]
 
   @@map("profiles")
+}
+
+model Notification {
+  id          String    @id @default(uuid()) @db.Uuid
+  recipientId String    @map("recipient_id") @db.Uuid
+  type        String
+  title       String
+  message     String
+  data        Json      @default("{}")
+  dedupeKey   String?   @map("dedupe_key")
+  readAt      DateTime? @map("read_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  recipient   Profile   @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@unique([recipientId, dedupeKey])
+  @@index([recipientId, createdAt(sort: Desc)])
+  @@index([recipientId, readAt])
+  @@map("notifications")
 }
 
 model Product {

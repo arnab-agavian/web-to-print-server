@@ -80,6 +80,7 @@ export const swaggerSpec = {
     { name: "Addresses", description: "Customer delivery address book" },
     { name: "Orders", description: "Customer orders" },
     { name: "Proofs", description: "Artwork proof workflow" },
+    { name: "Notifications", description: "Per-user customer and admin inbox" },
     { name: "Admin", description: "Production administration" },
   ],
   paths: {
@@ -1100,6 +1101,96 @@ export const swaggerSpec = {
         },
       },
     },
+    "/notifications": {
+      get: {
+        tags: ["Notifications"],
+        summary: "List the current user's notifications",
+        description:
+          "Works for customers and admins. Results are always restricted to the authenticated recipient.",
+        operationId: "getNotifications",
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          demoAdminHeader,
+          { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100, default: 20 } },
+          { name: "offset", in: "query", schema: { type: "integer", minimum: 0, default: 0 } },
+          { name: "unreadOnly", in: "query", schema: { type: "boolean", default: false } },
+          { name: "type", in: "query", schema: { type: "string", example: "proof_ready" } },
+        ],
+        responses: {
+          200: dataResponse("Notifications fetched.", { $ref: "#/components/schemas/NotificationList" }),
+          400: errorResponse("Invalid query parameters."),
+          401: errorResponse("Authentication required."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
+    "/notifications/unread-count": {
+      get: {
+        tags: ["Notifications"],
+        summary: "Get the current user's unread count",
+        operationId: "getUnreadNotificationCount",
+        security: [{ bearerAuth: [] }],
+        parameters: [demoAdminHeader],
+        responses: {
+          200: dataResponse("Unread count fetched.", { $ref: "#/components/schemas/UnreadNotificationCount" }),
+          401: errorResponse("Authentication required."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
+    "/notifications/read-all": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark all of the current user's notifications as read",
+        operationId: "markAllNotificationsRead",
+        security: [{ bearerAuth: [] }],
+        parameters: [demoAdminHeader],
+        responses: {
+          200: dataResponse("All notifications marked as read.", { $ref: "#/components/schemas/NotificationUpdateCount" }),
+          401: errorResponse("Authentication required."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
+    "/notifications/{id}/read": {
+      patch: {
+        tags: ["Notifications"],
+        summary: "Mark one owned notification as read",
+        operationId: "markNotificationRead",
+        security: [{ bearerAuth: [] }],
+        parameters: [idParameter, demoAdminHeader],
+        responses: {
+          200: dataResponse("Notification marked as read.", { $ref: "#/components/schemas/Notification" }),
+          400: errorResponse("Invalid notification ID."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Notification not found."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
+    "/notifications/{id}": {
+      delete: {
+        tags: ["Notifications"],
+        summary: "Delete one owned notification",
+        operationId: "deleteNotification",
+        security: [{ bearerAuth: [] }],
+        parameters: [idParameter, demoAdminHeader],
+        responses: {
+          200: dataResponse("Notification deleted.", {
+            type: "object",
+            properties: {
+              id: { type: "string", format: "uuid" },
+              deleted: { type: "boolean", enum: [true] },
+            },
+            required: ["id", "deleted"],
+          }),
+          400: errorResponse("Invalid notification ID."),
+          401: errorResponse("Authentication required."),
+          404: errorResponse("Notification not found."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
     "/admin/customers": {
       get: {
         tags: ["Admin"],
@@ -1919,6 +2010,43 @@ export const swaggerSpec = {
       OrderStatus: {
         type: "string",
         enum: ["quote", "order", "artwork", "proof", "production", "completed"],
+      },
+      Notification: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          type: { type: "string", example: "order_status_changed" },
+          title: { type: "string", example: "Order update: DH-123456" },
+          message: { type: "string", example: "Your order is now production." },
+          data: { type: "object", additionalProperties: true },
+          readAt: { type: "string", format: "date-time", nullable: true },
+          createdAt: { type: "string", format: "date-time" },
+        },
+        required: ["id", "type", "title", "message", "data", "readAt", "createdAt"],
+      },
+      NotificationList: {
+        type: "object",
+        properties: {
+          notifications: {
+            type: "array",
+            items: { $ref: "#/components/schemas/Notification" },
+          },
+          total: { type: "integer", minimum: 0 },
+          unreadCount: { type: "integer", minimum: 0 },
+          limit: { type: "integer", minimum: 1, maximum: 100 },
+          offset: { type: "integer", minimum: 0 },
+        },
+        required: ["notifications", "total", "unreadCount", "limit", "offset"],
+      },
+      UnreadNotificationCount: {
+        type: "object",
+        properties: { unreadCount: { type: "integer", minimum: 0 } },
+        required: ["unreadCount"],
+      },
+      NotificationUpdateCount: {
+        type: "object",
+        properties: { updatedCount: { type: "integer", minimum: 0 } },
+        required: ["updatedCount"],
       },
       Order: {
         type: "object",

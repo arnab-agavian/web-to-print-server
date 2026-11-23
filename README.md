@@ -38,6 +38,10 @@ The backend exposes `/api/auth/signup`, `/api/auth/login`, `/api/auth/refresh`, 
 
 Order, proof and production-status notifications use Resend. Set `EMAIL_ENABLED=true`, `RESEND_API_KEY`, `EMAIL_FROM` and `ADMIN_NOTIFICATION_EMAIL` in `.env`. `EMAIL_FROM` must use a sender/domain verified in Resend. Email delivery failures are logged and do not roll back successful order or proof transactions.
 
+## In-app notifications
+
+Customers and admins share the authenticated `/api/notifications` API, while every query and write is scoped to the current profile. Order, proof, and status events create deduplicated inbox records automatically. The API supports unread counts, pagination, type/unread filters, marking one or all notifications read, and deleting an owned notification.
+
 With `DEMO_MODE=true`, the API can still use in-memory fixtures for frontend review, but all product catalogue, detail, pricing and creation operations require `DATABASE_URL` and read from PostgreSQL.
 
 ## Scripts

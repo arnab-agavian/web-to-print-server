@@ -7,11 +7,15 @@ export async function verifyToken(req, res, next) {
   try {
     const token = req.headers.authorization?.replace(/^Bearer\s+/i, "");
     if (env.demoMode && !token) {
+      const isAdmin = req.headers["x-demo-role"] === "admin";
       req.authToken = null;
       req.user = {
-        id: "demo-customer",
-        email: "maya@example.com",
-        role: req.headers["x-demo-role"] === "admin" ? "admin" : "customer",
+        id: isAdmin ? "demo-admin" : "demo-customer",
+        email: isAdmin
+          ? env.email.admin || "admin@digitalheroes.example"
+          : "maya@example.com",
+        fullName: isAdmin ? "Digital Heroes Admin" : "Maya Brooks",
+        role: isAdmin ? "admin" : "customer",
       };
       return next();
     }

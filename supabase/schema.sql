@@ -180,6 +180,19 @@ create table if not exists public.order_events (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  recipient_id uuid not null references public.profiles(id) on delete cascade,
+  type text not null,
+  title text not null,
+  message text not null,
+  data jsonb not null default '{}'::jsonb,
+  dedupe_key text,
+  read_at timestamptz,
+  created_at timestamptz not null default now(),
+  unique(recipient_id, dedupe_key)
+);
+
 -- Foreign keys are not automatically indexed in Postgres.
 create index if not exists templates_product_id_idx on public.templates(product_id);
 create index if not exists addresses_customer_id_updated_idx on public.addresses(customer_id,updated_at desc);
@@ -201,6 +214,8 @@ create index if not exists production_files_order_id_idx on public.production_fi
 create index if not exists production_files_proof_id_idx on public.production_files(proof_id);
 create index if not exists order_events_order_id_created_idx on public.order_events(order_id, created_at desc);
 create index if not exists order_events_actor_id_idx on public.order_events(actor_id);
+create index if not exists notifications_recipient_id_created_idx on public.notifications(recipient_id, created_at desc);
+create index if not exists notifications_recipient_id_read_at_idx on public.notifications(recipient_id, read_at);
 create index if not exists products_configuration_gin_idx on public.products using gin(configuration_schema);
 
 create or replace function public.set_updated_at() returns trigger language plpgsql set search_path='' as $$
@@ -219,6 +234,45 @@ drop trigger if exists designs_set_updated_at on public.designs;
 create trigger designs_set_updated_at before update on public.designs for each row execute function public.set_updated_at();
 drop trigger if exists orders_set_updated_at on public.orders;
 create trigger orders_set_updated_at before update on public.orders for each row execute function public.set_updated_at();
+
+create or replace function public.create_order_notifications() returns trigger language plpgsql security definer set search_path='' as $$
+declare
+  customer_event text;
+  customer_label text;
+  order_label text;
+  total_label text;
+begin
+  customer_event := case when new.reordered_from is null then 'order_placed' else 'order_reordered' end;
+  order_label := coalesce(new.order_number,new.id::text);
+  total_label := new.currency || ' ' || trim(to_char(new.total,'FM999999999990.00'));
+  select coalesce(nullif(profile.full_name,''),profile.email,'A customer') into customer_label
+  from public.profiles as profile where profile.id=new.customer_id;
+
+  insert into public.notifications(recipient_id,type,title,message,data,dedupe_key)
+  values(
+    new.customer_id,
+    customer_event,
+    case when new.reordered_from is null then 'Order ' || order_label || ' received' else 'Reorder ' || order_label || ' received' end,
+    'We received your ' || case when new.reordered_from is null then 'order' else 'reorder' end || ' for ' || total_label || '.',
+    jsonb_build_object('orderId',new.id,'orderNumber',order_label),
+    customer_event || '/' || new.id::text
+  ) on conflict(recipient_id,dedupe_key) do nothing;
+
+  insert into public.notifications(recipient_id,type,title,message,data,dedupe_key)
+  select
+    admin.id,
+    case when new.reordered_from is null then 'new_order' else 'customer_reordered' end,
+    case when new.reordered_from is null then 'New order: ' || order_label else 'New reorder: ' || order_label end,
+    coalesce(customer_label,'A customer') || ' placed ' || order_label || ' for ' || total_label || '.',
+    jsonb_build_object('orderId',new.id,'orderNumber',order_label,'customerId',new.customer_id),
+    customer_event || '/' || new.id::text
+  from public.profiles as admin where admin.role='admin'
+  on conflict(recipient_id,dedupe_key) do nothing;
+  return new;
+end; $$;
+revoke all on function public.create_order_notifications() from public,anon,authenticated;
+drop trigger if exists orders_create_notifications on public.orders;
+create trigger orders_create_notifications after insert on public.orders for each row execute function public.create_order_notifications();
 
 create or replace function public.handle_new_user() returns trigger language plpgsql security definer set search_path='' as $$
 begin
@@ -251,6 +305,7 @@ alter table public.order_items enable row level security;
 alter table public.proofs enable row level security;
 alter table public.production_files enable row level security;
 alter table public.order_events enable row level security;
+alter table public.notifications enable row level security;
 
 drop policy if exists profiles_own_read on public.profiles;
 create policy profiles_own_read on public.profiles for select to authenticated using ((select auth.uid())=id or (select public.is_admin()));
@@ -284,6 +339,12 @@ drop policy if exists production_files_admin_read on public.production_files;
 create policy production_files_admin_read on public.production_files for select to authenticated using ((select public.is_admin()));
 drop policy if exists order_events_customer_read on public.order_events;
 create policy order_events_customer_read on public.order_events for select to authenticated using (exists(select 1 from public.orders o where o.id=order_id and (o.customer_id=(select auth.uid()) or (select public.is_admin()))));
+drop policy if exists notifications_own_select on public.notifications;
+create policy notifications_own_select on public.notifications for select to authenticated using ((select auth.uid())=recipient_id);
+drop policy if exists notifications_own_update on public.notifications;
+create policy notifications_own_update on public.notifications for update to authenticated using ((select auth.uid())=recipient_id) with check ((select auth.uid())=recipient_id);
+drop policy if exists notifications_own_delete on public.notifications;
+create policy notifications_own_delete on public.notifications for delete to authenticated using ((select auth.uid())=recipient_id);
 
 -- Called only by the trusted Express service-role client.
 create or replace function public.admin_dashboard_metrics() returns jsonb language sql stable security definer set search_path='' as $$

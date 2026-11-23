@@ -45,3 +45,5 @@ export const demoProofs = [
     created_at: "2026-11-19T04:42:00Z",
   },
 ];
+
+export const demoNotifications = [];

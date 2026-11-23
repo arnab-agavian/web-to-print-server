@@ -43,6 +43,11 @@ Base URL: `http://localhost:4000/api`
 | POST | `/orders` | Customer | Capture an atomically priced multi-product order |
 | GET | `/orders/:id` | Customer | Fetch one owned order |
 | POST | `/orders/:id/reorder` | Customer | Duplicate an owned order |
+| GET | `/notifications` | Customer/Admin | List own notifications with pagination and optional unread/type filters |
+| GET | `/notifications/unread-count` | Customer/Admin | Fetch own unread notification count |
+| PATCH | `/notifications/read-all` | Customer/Admin | Mark all own notifications as read |
+| PATCH | `/notifications/:id/read` | Customer/Admin | Mark one owned notification as read |
+| DELETE | `/notifications/:id` | Customer/Admin | Delete one owned notification |
 | POST | `/proofs/:id/approve` | Customer | Approve exact proof version |
 | POST | `/proofs/:id/change-request` | Customer | Request a revision |
 | POST | `/proofs/orders/:orderId` | Admin | Add versioned proof |
@@ -52,7 +57,9 @@ Base URL: `http://localhost:4000/api`
 | GET | `/admin/jobs/:id/production-file` | Admin | Generate once, privately store, record, and download order artwork rendered from its template and placeholder values |
 | GET | `/admin/analytics` | Admin | Order and revenue metrics |
 
-Send Supabase access tokens as `Authorization: Bearer <token>`. In local demo mode, omit the token; customer access is assumed. For admin endpoints only, add `x-demo-role: admin`.
+Send Supabase access tokens as `Authorization: Bearer <token>`. In local demo mode, omit the token; customer access is assumed. Add `x-demo-role: admin` for admin endpoints or to use the admin inbox on the shared notification endpoints.
+
+In-app notifications are created automatically for order placement/reorders, proof readiness, proof approval/change requests, and order status changes. Customer and admin inboxes are isolated by the authenticated profile ID.
 
 Production PDFs are stored in the private Supabase bucket configured by `SUPABASE_PRODUCTION_BUCKET` (default: `production`). Apply `supabase/schema.sql` or create this private bucket before generating a production file.
 

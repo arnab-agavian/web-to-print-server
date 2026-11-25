@@ -81,6 +81,7 @@ export const swaggerSpec = {
     { name: "Orders", description: "Customer orders" },
     { name: "Proofs", description: "Artwork proof workflow" },
     { name: "Notifications", description: "Per-user customer and admin inbox" },
+    { name: "User Activities", description: "Public anonymous activity recording" },
     { name: "Admin", description: "Production administration" },
   ],
   paths: {
@@ -1191,6 +1192,38 @@ export const swaggerSpec = {
         },
       },
     },
+    "/user-activities": {
+      post: {
+        tags: ["User Activities"],
+        summary: "Record an anonymous user activity",
+        description:
+          "This endpoint does not require a token. The IP address is derived by the server and cannot be supplied in the body.",
+        operationId: "createUserActivity",
+        requestBody: {
+          required: true,
+          content: jsonContent(
+            { $ref: "#/components/schemas/CreateUserActivityRequest" },
+            {
+              activity: "product.viewed",
+              location: {
+                latitude: 22.5726,
+                longitude: 88.3639,
+                city: "Kolkata",
+                region: "West Bengal",
+                country: "India",
+                countryCode: "IN",
+                timezone: "Asia/Calcutta",
+              },
+            },
+          ),
+        },
+        responses: {
+          201: dataResponse("User activity recorded.", { $ref: "#/components/schemas/UserActivity" }),
+          400: errorResponse("Validation failed."),
+          500: errorResponse("Unexpected server error."),
+        },
+      },
+    },
     "/admin/customers": {
       get: {
         tags: ["Admin"],
@@ -2047,6 +2080,48 @@ export const swaggerSpec = {
         type: "object",
         properties: { updatedCount: { type: "integer", minimum: 0 } },
         required: ["updatedCount"],
+      },
+      UserLocation: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          latitude: { type: "number", minimum: -90, maximum: 90 },
+          longitude: { type: "number", minimum: -180, maximum: 180 },
+          accuracy: { type: "number", minimum: 0, maximum: 100000 },
+          city: { type: "string", minLength: 1, maxLength: 100 },
+          region: { type: "string", minLength: 1, maxLength: 100 },
+          country: { type: "string", minLength: 1, maxLength: 100 },
+          countryCode: { type: "string", pattern: "^[A-Za-z]{2}$" },
+          timezone: { type: "string", minLength: 1, maxLength: 100 },
+        },
+        description:
+          "Provide latitude and longitude together, or at least one of city, region, country, or countryCode.",
+      },
+      CreateUserActivityRequest: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          activity: {
+            type: "string",
+            minLength: 1,
+            maxLength: 100,
+            pattern: "^[a-z][a-z0-9_.:-]*$",
+            example: "product.viewed",
+          },
+          location: { $ref: "#/components/schemas/UserLocation" },
+        },
+        required: ["activity", "location"],
+      },
+      UserActivity: {
+        type: "object",
+        properties: {
+          id: { type: "string", format: "uuid" },
+          activity: { type: "string", example: "product.viewed" },
+          location: { $ref: "#/components/schemas/UserLocation" },
+          ipAddress: { type: "string", example: "203.0.113.5" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+        required: ["id", "activity", "location", "ipAddress", "createdAt"],
       },
       Order: {
         type: "object",

@@ -48,6 +48,7 @@ Base URL: `http://localhost:4000/api`
 | PATCH | `/notifications/read-all` | Customer/Admin | Mark all own notifications as read |
 | PATCH | `/notifications/:id/read` | Customer/Admin | Mark one owned notification as read |
 | DELETE | `/notifications/:id` | Customer/Admin | Delete one owned notification |
+| POST | `/user-activities` | Public | Record an anonymous activity with client location and server-derived IP |
 | POST | `/proofs/:id/approve` | Customer | Approve exact proof version |
 | POST | `/proofs/:id/change-request` | Customer | Request a revision |
 | POST | `/proofs/orders/:orderId` | Admin | Add versioned proof |
@@ -60,6 +61,8 @@ Base URL: `http://localhost:4000/api`
 Send Supabase access tokens as `Authorization: Bearer <token>`. In local demo mode, omit the token; customer access is assumed. Add `x-demo-role: admin` for admin endpoints or to use the admin inbox on the shared notification endpoints.
 
 In-app notifications are created automatically for order placement/reorders, proof readiness, proof approval/change requests, and order status changes. Customer and admin inboxes are isolated by the authenticated profile ID.
+
+User activity requests accept `activity` (a lowercase identifier such as `product.viewed`) and a `location` object containing a coordinate pair and/or named location fields. No token is required. `userId` and `ipAddress` are never accepted from the client; the server derives the IP address. The activity table has no foreign keys to other tables.
 
 Production PDFs are stored in the private Supabase bucket configured by `SUPABASE_PRODUCTION_BUCKET` (default: `production`). Apply `supabase/schema.sql` or create this private bucket before generating a production file.
 

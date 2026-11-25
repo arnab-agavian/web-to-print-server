@@ -20,6 +20,17 @@ export function parseCorsOrigins(value) {
   ];
 }
 
+export function parseTrustProxy(value) {
+  const input = String(value ?? "").trim();
+  if (!input || input.toLowerCase() === "false") return false;
+  if (input.toLowerCase() === "true") return true;
+  if (/^\d+$/.test(input)) return Number(input);
+  return input
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
 export const env = {
   port,
   apiBaseUrl: (process.env.API_BASE_URL || `http://localhost:${port}/api`).replace(/\/$/, ""),
@@ -42,4 +53,5 @@ export const env = {
   origins: parseCorsOrigins(
     process.env.CORS_ORIGINS || "http://localhost:3000,http://localhost:5173"
   ),
+  trustProxy: parseTrustProxy(process.env.TRUST_PROXY),
 };

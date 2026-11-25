@@ -53,6 +53,7 @@ test("Swagger exposes every API operation", () => {
     ["/notifications/read-all", "patch"],
     ["/notifications/{id}/read", "patch"],
     ["/notifications/{id}", "delete"],
+    ["/user-activities", "post"],
     ["/proofs/orders/{orderId}", "post"],
     ["/proofs/{id}/approve", "post"],
     ["/proofs/{id}/change-request", "post"],
@@ -79,4 +80,10 @@ test("every Swagger component schema reference resolves", () => {
     ),
   ];
   assert.deepEqual(missing, []);
+});
+
+test("user activity recording is public and does not expose history", () => {
+  const activityPath = swaggerSpec.paths["/user-activities"];
+  assert.equal(activityPath.post.security, undefined);
+  assert.equal(activityPath.get, undefined);
 });

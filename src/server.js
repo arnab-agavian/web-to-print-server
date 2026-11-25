@@ -18,12 +18,14 @@ import orderRoutes from "./routes/order.routes.js";
 import proofRoutes from "./routes/proof.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import notificationRoutes from "./routes/notification.routes.js";
+import userActivityRoutes from "./routes/user-activity.routes.js";
 import { notFound } from "./middlewares/notFound.middleware.js";
 import { errorHandler } from "./middlewares/error.middleware.js";
 import { jsonReplacer, sendSuccess } from "./utils/response.js";
 
 const app = express();
 app.disable("x-powered-by");
+app.set("trust proxy", env.trustProxy);
 app.set("json replacer", jsonReplacer);
 app.use(helmet({ crossOriginResourcePolicy: { policy: "cross-origin" } }));
 app.use(
@@ -91,6 +93,7 @@ app.use("/api/files", fileRoutes);
 app.use("/api/orders", orderRoutes);
 app.use("/api/proofs", proofRoutes);
 app.use("/api/notifications", notificationRoutes);
+app.use("/api/user-activities", userActivityRoutes);
 app.use("/api/admin", adminRoutes);
 app.use(notFound);
 app.use(errorHandler);

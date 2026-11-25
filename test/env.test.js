@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseCorsOrigins } from "../src/config/env.js";
+import { parseCorsOrigins, parseTrustProxy } from "../src/config/env.js";
 
 test("CORS origins are normalized without trailing slashes or paths", () => {
   assert.deepEqual(
@@ -21,4 +21,15 @@ test("CORS origin parsing removes blanks and duplicates", () => {
     ),
     ["https://example.com"],
   );
+});
+
+test("proxy trust parsing is explicit and supports hop counts or address lists", () => {
+  assert.equal(parseTrustProxy(undefined), false);
+  assert.equal(parseTrustProxy("false"), false);
+  assert.equal(parseTrustProxy("true"), true);
+  assert.equal(parseTrustProxy("1"), 1);
+  assert.deepEqual(parseTrustProxy("loopback, 10.0.0.0/8"), [
+    "loopback",
+    "10.0.0.0/8",
+  ]);
 });

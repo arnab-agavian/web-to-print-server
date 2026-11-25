@@ -193,6 +193,16 @@ create table if not exists public.notifications (
   unique(recipient_id, dedupe_key)
 );
 
+-- Standalone activity log. user_id deliberately has no foreign key.
+create table if not exists public.user_activities (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid,
+  activity varchar(100) not null check (activity ~ '^[a-z][a-z0-9_.:-]*$'),
+  location jsonb not null check (jsonb_typeof(location) = 'object'),
+  ip_address varchar(45) not null,
+  created_at timestamptz not null default now()
+);
+
 -- Foreign keys are not automatically indexed in Postgres.
 create index if not exists templates_product_id_idx on public.templates(product_id);
 create index if not exists addresses_customer_id_updated_idx on public.addresses(customer_id,updated_at desc);
@@ -216,6 +226,8 @@ create index if not exists order_events_order_id_created_idx on public.order_eve
 create index if not exists order_events_actor_id_idx on public.order_events(actor_id);
 create index if not exists notifications_recipient_id_created_idx on public.notifications(recipient_id, created_at desc);
 create index if not exists notifications_recipient_id_read_at_idx on public.notifications(recipient_id, read_at);
+create index if not exists user_activities_user_id_created_at_idx on public.user_activities(user_id, created_at desc);
+create index if not exists user_activities_activity_created_at_idx on public.user_activities(activity, created_at desc);
 create index if not exists products_configuration_gin_idx on public.products using gin(configuration_schema);
 
 create or replace function public.set_updated_at() returns trigger language plpgsql set search_path='' as $$
@@ -306,6 +318,7 @@ alter table public.proofs enable row level security;
 alter table public.production_files enable row level security;
 alter table public.order_events enable row level security;
 alter table public.notifications enable row level security;
+alter table public.user_activities enable row level security;
 
 drop policy if exists profiles_own_read on public.profiles;
 create policy profiles_own_read on public.profiles for select to authenticated using ((select auth.uid())=id or (select public.is_admin()));
@@ -345,6 +358,10 @@ drop policy if exists notifications_own_update on public.notifications;
 create policy notifications_own_update on public.notifications for update to authenticated using ((select auth.uid())=recipient_id) with check ((select auth.uid())=recipient_id);
 drop policy if exists notifications_own_delete on public.notifications;
 create policy notifications_own_delete on public.notifications for delete to authenticated using ((select auth.uid())=recipient_id);
+drop policy if exists user_activities_own_insert on public.user_activities;
+create policy user_activities_own_insert on public.user_activities for insert to authenticated with check ((select auth.uid())=user_id);
+drop policy if exists user_activities_own_select on public.user_activities;
+create policy user_activities_own_select on public.user_activities for select to authenticated using ((select auth.uid())=user_id);
 
 -- Called only by the trusted Express service-role client.
 create or replace function public.admin_dashboard_metrics() returns jsonb language sql stable security definer set search_path='' as $$

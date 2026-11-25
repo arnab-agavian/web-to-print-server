@@ -42,6 +42,12 @@ Order, proof and production-status notifications use Resend. Set `EMAIL_ENABLED=
 
 Customers and admins share the authenticated `/api/notifications` API, while every query and write is scoped to the current profile. Order, proof, and status events create deduplicated inbox records automatically. The API supports unread counts, pagination, type/unread filters, marking one or all notifications read, and deleting an owned notification.
 
+## User activity log
+
+Clients can append anonymous activity records through public `POST /api/user-activities` without an access token. The server derives the IP address from the request; clients provide a validated activity name and device/browser location. No public history endpoint is exposed because the records contain location and IP data. The `user_activities` table is append-only and deliberately has no foreign keys or Prisma relations to any other table.
+
+When the API runs behind a reverse proxy, set `TRUST_PROXY` to the trusted proxy hop count (commonly `1`) so Express resolves the client IP correctly. Leave it `false` when the Node server is directly internet-facing.
+
 With `DEMO_MODE=true`, the API can still use in-memory fixtures for frontend review, but all product catalogue, detail, pricing and creation operations require `DATABASE_URL` and read from PostgreSQL.
 
 ## Scripts

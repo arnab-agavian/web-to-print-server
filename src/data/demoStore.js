@@ -47,3 +47,5 @@ export const demoProofs = [
 ];
 
 export const demoNotifications = [];
+
+export const demoUserActivities = [];
